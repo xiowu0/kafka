@@ -63,6 +63,7 @@ abstract class AbstractFetcherThread(name: String,
   private val metricId = ClientIdAndBroker(clientId, sourceBroker.host, sourceBroker.port)
   val fetcherStats = new FetcherStats(metricId)
   val fetcherLagStats = new FetcherLagStats(metricId)
+  var lastFetchTimeMs = System.currentTimeMillis
 
   /* callbacks to be defined in subclass */
 
@@ -145,7 +146,8 @@ abstract class AbstractFetcherThread(name: String,
     var responseData: Seq[(TopicPartition, PD)] = Seq.empty
 
     try {
-      trace(s"Sending fetch request $fetchRequest")
+      trace(s"Issuing fetch to broker ${sourceBroker.id}, request: $fetchRequest")
+      lastFetchTimeMs = System.currentTimeMillis
       responseData = fetch(fetchRequest)
     } catch {
       case t: Throwable =>
