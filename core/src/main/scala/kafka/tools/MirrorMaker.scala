@@ -298,6 +298,7 @@ object MirrorMaker extends Logging with KafkaMetricsGroup {
 
         // HOTFIX LIKAFKA-12852
         case e: KafkaException if e.getMessage != null && e.getMessage.contains("may not exist or user may not have Describe access to topic") =>
+          consumerWrapper.clearOffsetMap()
           error("Failed to commit offsets due to an unrecoverable error such as committing to a deleted topic", e)
       }
     } else {
@@ -490,6 +491,12 @@ object MirrorMaker extends Logging with KafkaMetricsGroup {
 
     def commit() {
       consumer.commitSync(offsets.map { case (tp, offset) =>  (tp, new OffsetAndMetadata(offset, ""))}.asJava)
+      offsets.clear()
+    }
+
+    // HOTFIX LIKAFKA-12852, need to clear the offsets map when a KafkaException has been thrown due to topic
+    // deletion during offset commet.
+    def clearOffsetMap(): Unit = {
       offsets.clear()
     }
   }
