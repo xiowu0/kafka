@@ -191,6 +191,7 @@ class ReplicaManager(val config: KafkaConfig,
   private val lastIsrPropagationMs = new AtomicLong(System.currentTimeMillis())
 
   private var logDirFailureHandler: LogDirFailureHandler = null
+  val recompressedBatchCount: AtomicLong = new AtomicLong(0)
 
   private class LogDirFailureHandler(name: String, haltBrokerOnDirFailure: Boolean) extends ShutdownableThread(name) {
     override def doWork() {
@@ -234,6 +235,13 @@ class ReplicaManager(val config: KafkaConfig,
     }
   )
 
+  val recompressionCount = newGauge(
+    "recompressionCount",
+    new Gauge[Long] {
+      def value = recompressedBatchCount.get()
+    }
+  )
+
   val isrExpandRate = newMeter("IsrExpandsPerSec", "expands", TimeUnit.SECONDS)
   val isrShrinkRate = newMeter("IsrShrinksPerSec", "shrinks", TimeUnit.SECONDS)
   val failedIsrUpdatesRate = newMeter("FailedIsrUpdatesPerSec", "failedUpdates", TimeUnit.SECONDS)
@@ -250,6 +258,10 @@ class ReplicaManager(val config: KafkaConfig,
       isrChangeSet += topicPartition
       lastIsrChangeMs.set(time.milliseconds())
     }
+  }
+
+  def incrementRecompressionCount() {
+    recompressedBatchCount.incrementAndGet()
   }
 
   /**
@@ -756,6 +768,9 @@ class ReplicaManager(val config: KafkaConfig,
           val (partition, _) = getPartitionAndLeaderReplicaIfLocal(topicPartition)
           val info = partition.appendRecordsToLeader(records, isFromClient, requiredAcks)
           val numAppendedMessages = info.numMessages
+
+          // update stats for compressed or decompressed batches on broker
+          recompressedBatchCount.addAndGet(info.recompressedBatchCount)
 
           // update stats for successfully appended bytes and messages as bytesInRate and messageInRate
           brokerTopicStats.topicStats(topicPartition.topic).bytesInRate.mark(records.sizeInBytes)
@@ -1460,6 +1475,7 @@ class ReplicaManager(val config: KafkaConfig,
     removeMetric("OfflineReplicaCount")
     removeMetric("UnderReplicatedPartitions")
     removeMetric("UnderMinIsrPartitionCount")
+    removeMetric("recompressedBatch")
   }
 
   // High watermark do not need to be checkpointed only when under unit tests
