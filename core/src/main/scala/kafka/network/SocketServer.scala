@@ -68,7 +68,7 @@ class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time
   private val memoryPoolDepletedTimeMetricName = metrics.metricName("MemoryPoolDepletedTimeTotal", "socket-server-metrics")
   memoryPoolSensor.add(new Meter(TimeUnit.MILLISECONDS, memoryPoolDepletedPercentMetricName, memoryPoolDepletedTimeMetricName))
   private val memoryPool = if (config.queuedMaxBytes > 0) new SimpleMemoryPool(config.queuedMaxBytes, config.socketRequestMaxBytes, false, memoryPoolSensor) else MemoryPool.NONE
-  val requestChannel = new RequestChannel(maxQueuedRequests)
+  val requestChannel = new RequestChannel(maxQueuedRequests, time)
   private val processors = new ConcurrentHashMap[Int, Processor]()
   private var nextProcessorId = 0
 

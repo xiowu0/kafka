@@ -272,11 +272,15 @@ object RequestChannel extends Logging {
   }
 }
 
-class RequestChannel(val queueSize: Int) extends KafkaMetricsGroup {
+class RequestChannel(val queueSize: Int, val time: Time) extends KafkaMetricsGroup {
   import RequestChannel._
   val metrics = new RequestChannel.Metrics
   private val requestQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
   private val processors = new ConcurrentHashMap[Int, Processor]()
+  @volatile var lastDequeueTimeMs = time.milliseconds
+  // This metric can help user select a suitable threshold for requestMaxLocalTimeMs so that broker can shutdown itself only when it
+  // is stuck or too slow. A suggested value of requestMaxLocalTimeMs could be twice the 999'th percentile of the RequestDequeuePollIntervalMs.
+  private val requestDequeuePollIntervalMs = newHistogram("RequestDequeuePollIntervalMs")
 
   newGauge(RequestQueueSizeMetric, new Gauge[Int] {
       def value = requestQueue.size
@@ -338,12 +342,20 @@ class RequestChannel(val queueSize: Int) extends KafkaMetricsGroup {
   }
 
   /** Get the next request or block until specified time has elapsed */
-  def receiveRequest(timeout: Long): RequestChannel.BaseRequest =
+  def receiveRequest(timeout: Long): RequestChannel.BaseRequest = {
+    val curTime = time.milliseconds
+    requestDequeuePollIntervalMs.update(curTime - lastDequeueTimeMs)
+    lastDequeueTimeMs = curTime
     requestQueue.poll(timeout, TimeUnit.MILLISECONDS)
+  }
 
   /** Get the next request or block until there is one */
-  def receiveRequest(): RequestChannel.BaseRequest =
+  def receiveRequest(): RequestChannel.BaseRequest = {
+    val curTime = time.milliseconds
+    requestDequeuePollIntervalMs.update(curTime - lastDequeueTimeMs)
+    lastDequeueTimeMs = curTime
     requestQueue.take()
+  }
 
   def updateErrorMetrics(apiKey: ApiKeys, errors: collection.Map[Errors, Integer]) {
     errors.foreach { case (error, count) =>
