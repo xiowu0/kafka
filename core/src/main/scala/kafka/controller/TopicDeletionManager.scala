@@ -19,6 +19,7 @@ package kafka.controller
 import kafka.utils.Logging
 import kafka.zk.KafkaZkClient
 import org.apache.kafka.common.TopicPartition
+import org.apache.zookeeper.KeeperException.{NoNodeException, NodeExistsException}
 
 import scala.collection.{Set, mutable}
 
@@ -60,12 +61,21 @@ class TopicDeletionManager(controller: KafkaController,
                            zkClient: KafkaZkClient) extends Logging {
   this.logIdent = s"[Topic Deletion Manager ${controller.config.brokerId}], "
   val controllerContext = controller.controllerContext
-  val isDeleteTopicEnabled = controller.config.deleteTopicEnable
+  var isDeleteTopicEnabled = controller.config.deleteTopicEnable
   val topicsToBeDeleted = mutable.Set.empty[String]
   val partitionsToBeDeleted = mutable.Set.empty[TopicPartition]
   val topicsIneligibleForDeletion = mutable.Set.empty[String]
 
+  // Try to create the znode for delete topic flag
+  try {
+    zkClient.createDeleteTopicFlagPath()
+  } catch {
+    case _: NodeExistsException =>
+  }
+
   def init(initialTopicsToBeDeleted: Set[String], initialTopicsIneligibleForDeletion: Set[String]): Unit = {
+    isDeleteTopicEnabled = getDeleteTopicEnabled()
+
     if (isDeleteTopicEnabled) {
       topicsToBeDeleted ++= initialTopicsToBeDeleted
       partitionsToBeDeleted ++= topicsToBeDeleted.flatMap(controllerContext.partitionsForTopic)
@@ -353,5 +363,21 @@ class TopicDeletionManager(controller: KafkaController,
         debug(s"Not retrying deletion of topic $topic at this time since it is marked ineligible for deletion")
       }
     }
+  }
+
+  private def getDeleteTopicEnabled(): Boolean = {
+    try {
+      val deleteTopicFlag = zkClient.getTopicDeletionFlag
+      if (!deleteTopicFlag.equalsIgnoreCase("true") && !deleteTopicFlag.equalsIgnoreCase("false"))
+        isDeleteTopicEnabled
+      else deleteTopicFlag.toBoolean
+    } catch {
+      case _: NoNodeException => controller.config.deleteTopicEnable
+    }
+  }
+
+  def resetDeleteTopicEnabled(): Unit = {
+    info("Reset isDeleteTopicEnabled flag to %s".format(controller.config.deleteTopicEnable))
+    isDeleteTopicEnabled = controller.config.deleteTopicEnable
   }
 }
