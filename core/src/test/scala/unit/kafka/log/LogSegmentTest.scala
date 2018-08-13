@@ -169,6 +169,7 @@ class LogSegmentTest {
     val maxSegmentMs = 300000
     val time = new MockTime
     val seg = createSegment(0, maxSegmentMs = maxSegmentMs, time = time)
+    seg.sanityCheck()
     seg.close()
 
     val reopened = createSegment(0, maxSegmentMs = maxSegmentMs, time = time)
