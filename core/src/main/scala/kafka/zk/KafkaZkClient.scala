@@ -20,7 +20,7 @@ import java.util.Properties
 
 import com.yammer.metrics.core.MetricName
 import kafka.api.LeaderAndIsr
-import kafka.cluster.Broker
+import kafka.cluster.{Broker, SessionizedBroker}
 import kafka.controller.LeaderIsrAndControllerEpoch
 import kafka.log.LogConfig
 import kafka.metrics.KafkaMetricsGroup
@@ -314,6 +314,27 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
   }
 
   /**
+    * Gets all brokers in the cluster.
+    * @return sequence of brokers in the cluster.
+    */
+  def getAllSessionizedBrokersInCluster: Seq[SessionizedBroker] = {
+    val brokerIds = getSortedBrokerList
+    val getDataRequests = brokerIds.map(brokerId => GetDataRequest(BrokerIdZNode.path(brokerId), ctx = Some(brokerId)))
+    val getDataResponses = retryRequestsUntilConnected(getDataRequests)
+    getDataResponses.flatMap { getDataResponse =>
+      val brokerId = getDataResponse.ctx.get.asInstanceOf[Int]
+      getDataResponse.resultCode match {
+        case Code.OK =>
+          val broker = BrokerIdZNode.decode(brokerId, getDataResponse.data).broker
+          val sessionizedBroker = SessionizedBroker(broker.id, broker.endPoints, broker.rack, getDataResponse.stat.getCzxid)
+          Option(sessionizedBroker)
+        case Code.NONODE => None
+        case _ => throw getDataResponse.resultException.get
+      }
+    }
+  }
+
+  /**
    * Gets all brokers in the cluster.
    * @return sequence of brokers in the cluster.
    */
@@ -329,6 +350,23 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
         case Code.NONODE => None
         case _ => throw getDataResponse.resultException.get
       }
+    }
+  }
+
+  /**
+    * Get a broker from ZK
+    * @return an optional Broker
+    */
+  def getSessionizedBroker(brokerId: Int): Option[SessionizedBroker] = {
+    val getDataRequest = GetDataRequest(BrokerIdZNode.path(brokerId))
+    val getDataResponse = retryRequestUntilConnected(getDataRequest)
+    getDataResponse.resultCode match {
+      case Code.OK =>
+        val broker = BrokerIdZNode.decode(brokerId, getDataResponse.data).broker
+        val sessionizedBroker = SessionizedBroker(broker.id, broker.endPoints, broker.rack, getDataResponse.stat.getCzxid)
+        Option(sessionizedBroker)
+      case Code.NONODE => None
+      case _ => throw getDataResponse.resultException.get
     }
   }
 

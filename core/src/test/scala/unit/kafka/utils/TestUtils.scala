@@ -29,7 +29,7 @@ import java.util.concurrent.{Callable, ExecutionException, Executors, TimeUnit}
 
 import javax.net.ssl.X509TrustManager
 import kafka.api._
-import kafka.cluster.{Broker, EndPoint}
+import kafka.cluster.{Broker, EndPoint, SessionizedBroker}
 import kafka.consumer.{ConsumerConfig, ConsumerTimeoutException, KafkaStream}
 import kafka.log._
 import kafka.message._
@@ -140,6 +140,9 @@ object TestUtils extends Logging {
 
   def boundPort(server: KafkaServer, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): Int =
     server.boundPort(ListenerName.forSecurityProtocol(securityProtocol))
+
+  def createSessionizedBroker(id: Int, host: String, port: Int, sessionId: Long, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): SessionizedBroker =
+    new SessionizedBroker(id, host, port, ListenerName.forSecurityProtocol(securityProtocol), securityProtocol, sessionId)
 
   def createBroker(id: Int, host: String, port: Int, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): Broker =
     new Broker(id, host, port, ListenerName.forSecurityProtocol(securityProtocol), securityProtocol)

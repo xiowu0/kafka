@@ -17,7 +17,7 @@
 
 package kafka.server
 
-import java.util.concurrent.{CountDownLatch, Future, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import org.apache.kafka.common.TopicPartition
 
@@ -26,7 +26,7 @@ import kafka.api.LeaderAndIsr
 import org.apache.kafka.common.requests._
 import org.junit.Assert._
 import kafka.utils.TestUtils
-import kafka.cluster.Broker
+import kafka.cluster.SessionizedBroker
 import kafka.controller.{ControllerChannelManager, ControllerContext, StateChangeLogger}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
@@ -134,8 +134,8 @@ class LeaderElectionTest extends ZooKeeperTestHarness {
     val controllerConfig = KafkaConfig.fromProps(TestUtils.createBrokerConfig(controllerId, zkConnect))
     val securityProtocol = SecurityProtocol.PLAINTEXT
     val listenerName = ListenerName.forSecurityProtocol(securityProtocol)
-    val brokers = servers.map(s => new Broker(s.config.brokerId, "localhost", TestUtils.boundPort(s), listenerName,
-      securityProtocol))
+    val brokers = servers.map(s => new SessionizedBroker(s.config.brokerId, "localhost", TestUtils.boundPort(s), listenerName,
+      securityProtocol, 0))
     val nodes = brokers.map(_.node(listenerName))
 
     val controllerContext = new ControllerContext
@@ -184,8 +184,8 @@ class LeaderElectionTest extends ZooKeeperTestHarness {
     val controllerConfig = KafkaConfig.fromProps(TestUtils.createBrokerConfig(controllerId, zkConnect))
     val securityProtocol = SecurityProtocol.PLAINTEXT
     val listenerName = ListenerName.forSecurityProtocol(securityProtocol)
-    val brokers = servers.map(s => new Broker(s.config.brokerId, "localhost", TestUtils.boundPort(s), listenerName,
-      securityProtocol))
+    val brokers = servers.map(s => new SessionizedBroker(s.config.brokerId, "localhost", TestUtils.boundPort(s), listenerName,
+      securityProtocol, 0))
     val nodes = brokers.map(_.node(listenerName))
 
     val controllerContext = new ControllerContext

@@ -649,7 +649,7 @@ class KafkaController(val config: KafkaConfig, zkClient: KafkaZkClient, time: Ti
 
   private def initializeControllerContext() {
     // update controller cache with delete topic information
-    controllerContext.liveBrokers = zkClient.getAllBrokersInCluster.toSet
+    controllerContext.liveBrokers = zkClient.getAllSessionizedBrokersInCluster.toSet
     controllerContext.allTopics = zkClient.getAllTopicsInCluster.toSet
     registerPartitionModificationsHandlers(controllerContext.allTopics.toSeq)
     zkClient.getReplicaAssignmentForTopics(controllerContext.allTopics.toSet).foreach {
@@ -1233,23 +1233,32 @@ class KafkaController(val config: KafkaConfig, zkClient: KafkaZkClient, time: Ti
 
     override def process(): Unit = {
       if (!isActive) return
-      val curBrokers = zkClient.getAllBrokersInCluster.toSet
+      val curBrokers = zkClient.getAllSessionizedBrokersInCluster.toSet
+      val curBrokerSessionIds = curBrokers.map(broker => broker.id -> broker.sessionId).toMap
       val curBrokerIds = curBrokers.map(_.id)
-      val liveOrShuttingDownBrokerIds = controllerContext.liveOrShuttingDownBrokerIds
-      val newBrokerIds = curBrokerIds -- liveOrShuttingDownBrokerIds
-      val deadBrokerIds = liveOrShuttingDownBrokerIds -- curBrokerIds
+      val newBrokerIds = curBrokerIds -- controllerContext.liveOrShuttingDownBrokerIds
+      val deadBrokerIds = controllerContext.liveOrShuttingDownBrokerIds -- curBrokerIds
+      val bouncedBrokerIds = (curBrokerIds & controllerContext.liveOrShuttingDownBrokerIds)
+        .filter(bid => curBrokerSessionIds(bid) > controllerContext.liveOrShuttingDownBrokerSessionIds(bid))
+      val bouncedBrokerIdsSorted = bouncedBrokerIds.toSeq.sorted
       val newBrokers = curBrokers.filter(broker => newBrokerIds(broker.id))
+      val bouncedBrokers = curBrokers.filter(broker => bouncedBrokerIds(broker.id))
       controllerContext.liveBrokers = curBrokers
       val newBrokerIdsSorted = newBrokerIds.toSeq.sorted
       val deadBrokerIdsSorted = deadBrokerIds.toSeq.sorted
       val liveBrokerIdsSorted = curBrokerIds.toSeq.sorted
       info(s"Newly added brokers: ${newBrokerIdsSorted.mkString(",")}, " +
-        s"deleted brokers: ${deadBrokerIdsSorted.mkString(",")}, all live brokers: ${liveBrokerIdsSorted.mkString(",")}")
-
-      newBrokers.foreach(controllerContext.controllerChannelManager.addBroker)
+        s"deleted brokers: ${deadBrokerIdsSorted.mkString(",")}, bounced brokers: ${bouncedBrokerIdsSorted.mkString(",")}, all live brokers: ${liveBrokerIdsSorted.mkString(",")}")
       deadBrokerIds.foreach(controllerContext.controllerChannelManager.removeBroker)
+      bouncedBrokerIds.foreach(controllerContext.controllerChannelManager.removeBroker)
+      bouncedBrokers.foreach(controllerContext.controllerChannelManager.addBroker)
+      newBrokers.foreach(controllerContext.controllerChannelManager.addBroker)
       if (newBrokerIds.nonEmpty)
         onBrokerStartup(newBrokerIdsSorted)
+      if (bouncedBrokerIds.nonEmpty) {
+        onBrokerFailure(bouncedBrokerIdsSorted)
+        onBrokerStartup(bouncedBrokerIdsSorted)
+      }
       if (deadBrokerIds.nonEmpty)
         onBrokerFailure(deadBrokerIdsSorted)
     }
@@ -1260,7 +1269,7 @@ class KafkaController(val config: KafkaConfig, zkClient: KafkaZkClient, time: Ti
 
     override def process(): Unit = {
       if (!isActive) return
-      val newMetadata = zkClient.getBroker(brokerId)
+      val newMetadata = zkClient.getSessionizedBroker(brokerId)
       val oldMetadata = controllerContext.liveBrokers.find(_.id == brokerId)
       if (newMetadata.nonEmpty && oldMetadata.nonEmpty && newMetadata.map(_.endPoints) != oldMetadata.map(_.endPoints)) {
         info(s"Updated broker: ${newMetadata.get}")

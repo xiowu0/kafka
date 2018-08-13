@@ -17,7 +17,7 @@
 
 package kafka.controller
 
-import kafka.cluster.Broker
+import kafka.cluster.SessionizedBroker
 import org.apache.kafka.common.TopicPartition
 
 import scala.collection.{Seq, Set, mutable}
@@ -36,8 +36,9 @@ class ControllerContext {
   val partitionsBeingReassigned: mutable.Map[TopicPartition, ReassignedPartitionsContext] = mutable.Map.empty
   val replicasOnOfflineDirs: mutable.Map[Int, Set[TopicPartition]] = mutable.Map.empty
 
-  private var liveBrokersUnderlying: Set[Broker] = Set.empty
+  private var liveBrokersUnderlying: Set[SessionizedBroker] = Set.empty
   private var liveBrokerIdsUnderlying: Set[Int] = Set.empty
+  private var liveBrokerSessionIdsUnderlying: Map[Int, Long] = Map.empty
 
   def partitionReplicaAssignment(topicPartition: TopicPartition): Seq[Int] = {
     partitionReplicaAssignmentUnderlying.getOrElse(topicPartition.topic, mutable.Map.empty)
@@ -72,9 +73,10 @@ class ControllerContext {
   }
 
   // setter
-  def liveBrokers_=(brokers: Set[Broker]) {
+  def liveBrokers_=(brokers: Set[SessionizedBroker]) {
     liveBrokersUnderlying = brokers
     liveBrokerIdsUnderlying = liveBrokersUnderlying.map(_.id)
+    liveBrokerSessionIdsUnderlying = liveBrokersUnderlying.map(broker => broker.id -> broker.sessionId).toMap
   }
 
   // getter
@@ -83,6 +85,7 @@ class ControllerContext {
 
   def liveOrShuttingDownBrokerIds = liveBrokerIdsUnderlying
   def liveOrShuttingDownBrokers = liveBrokersUnderlying
+  def liveOrShuttingDownBrokerSessionIds = liveBrokerSessionIdsUnderlying
 
   def partitionsOnBroker(brokerId: Int): Set[TopicPartition] = {
     partitionReplicaAssignmentUnderlying.flatMap {
