@@ -30,7 +30,7 @@ import kafka.utils.CoreUtils.{inReadLock, inWriteLock}
 import kafka.utils._
 import kafka.zk.AdminZkClient
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.errors.{ReplicaNotAvailableException, NotEnoughReplicasException, NotLeaderForPartitionException, PolicyViolationException}
+import org.apache.kafka.common.errors.{ReplicaNotAvailableException, NotEnoughReplicasException, NotLeaderForPartitionException}
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.record.MemoryRecords
@@ -672,8 +672,6 @@ class Partition(val topic: String,
     inReadLock(leaderIsrUpdateLock) {
       leaderReplicaIfLocal match {
         case Some(leaderReplica) =>
-          if (!leaderReplica.log.get.config.delete)
-            throw new PolicyViolationException("Records of partition %s can not be deleted due to the configured policy".format(topicPartition))
           leaderReplica.maybeIncrementLogStartOffset(offset)
           lowWatermarkIfLeader
         case None =>
