@@ -2306,4 +2306,7 @@ public class SenderTest {
         }
     }
 
+    public void removeThisMethod() {
+
+    }
 }
