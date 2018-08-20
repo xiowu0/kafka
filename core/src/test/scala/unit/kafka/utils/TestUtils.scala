@@ -562,7 +562,8 @@ object TestUtils extends Logging {
                            saslProperties: Option[Properties] = None,
                            keySerializer: Serializer[K] = new ByteArraySerializer,
                            valueSerializer: Serializer[V] = new ByteArraySerializer,
-                           props: Option[Properties] = None): KafkaProducer[K, V] = {
+                           props: Option[Properties] = None,
+                           deliveryTimeoutMs : Int = -1): KafkaProducer[K, V] = {
 
     val producerProps = props.getOrElse(new Properties)
     producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList)
@@ -574,8 +575,14 @@ object TestUtils extends Logging {
     producerProps.put(ProducerConfig.LINGER_MS_CONFIG, lingerMs.toString)
 
     // In case of overflow set maximum possible value for deliveryTimeoutMs
-    val deliveryTimeoutMs = if (lingerMs + requestTimeoutMs < 0) Int.MaxValue else lingerMs + requestTimeoutMs
-    producerProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, deliveryTimeoutMs.toString)
+    val deliveryTimeoutMsConfig = if (deliveryTimeoutMs != -1)
+      deliveryTimeoutMs
+    else if (lingerMs + requestTimeoutMs < 0)
+      Int.MaxValue
+    else
+      lingerMs + requestTimeoutMs
+
+    producerProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, deliveryTimeoutMsConfig.toString)
 
     /* Only use these if not already set */
     val defaultProps = Map(
@@ -1055,13 +1062,18 @@ object TestUtils extends Logging {
     values
   }
 
-  def produceMessage(servers: Seq[KafkaServer], topic: String, message: String) {
-    val producer = createProducer(
-      TestUtils.getBrokerListStrFromServers(servers),
-      retries = 5
+  def produceMessage(servers: Seq[KafkaServer], topic: String, message: String,
+                     deliveryTimeoutMs : Int = 30 * 1000, requestTimeoutMs: Int = 20 * 1000) {
+    val producer = createProducer(TestUtils.getBrokerListStrFromServers(servers),
+      deliveryTimeoutMs = deliveryTimeoutMs,
+      retries = 5,
+      requestTimeoutMs = requestTimeoutMs
     )
-    producer.send(new ProducerRecord(topic, topic.getBytes, message.getBytes)).get
-    producer.close()
+    try {
+      producer.send(new ProducerRecord(topic, topic.getBytes, message.getBytes)).get
+    } finally {
+      producer.close()
+    }
   }
 
   /**
@@ -1455,6 +1467,13 @@ object TestUtils extends Logging {
     } else {
       Map(new ConfigResource(ConfigResource.Type.BROKER, "") -> newConfig).asJava
     }
+    adminClient.alterConfigs(configs)
+  }
+
+  def alterTopicConfigs(adminClient: AdminClient, topic: String, topicConfigs: Properties): AlterConfigsResult = {
+    val configEntries = topicConfigs.asScala.map { case (k, v) => new ConfigEntry(k, v) }.toList.asJava
+    val newConfig = new Config(configEntries)
+    val configs = Map(new ConfigResource(ConfigResource.Type.TOPIC, topic) -> newConfig).asJava
     adminClient.alterConfigs(configs)
   }
 
