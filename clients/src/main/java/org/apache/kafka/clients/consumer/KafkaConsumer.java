@@ -919,7 +919,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                 }
 
                 throwIfNoAssignorsConfigured();
-
+                fetcher.filterUnassignedTopics(topics);
                 log.debug("Subscribed to topic(s): {}", Utils.join(topics, ", "));
                 this.subscriptions.subscribe(new HashSet<>(topics), listener);
                 metadata.setTopics(subscriptions.groupSubscription());
@@ -1021,6 +1021,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
         acquireAndEnsureOpen();
         try {
             log.info("Unsubscribed all topics or patterns and assigned partitions");
+            fetcher.filterUnassignedPartitions(Collections.EMPTY_SET);
             this.subscriptions.unsubscribe();
             this.coordinator.maybeLeaveGroup();
             this.metadata.needMetadataForAllTopics(false);
@@ -1064,6 +1065,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
                         throw new IllegalArgumentException("Topic partitions to assign to cannot have null or empty topic");
                     topics.add(topic);
                 }
+                fetcher.filterUnassignedPartitions(new HashSet<>(partitions));
 
                 // make sure the offsets of topic partitions the consumer is unsubscribing from
                 // are committed since there will be no following rebalance

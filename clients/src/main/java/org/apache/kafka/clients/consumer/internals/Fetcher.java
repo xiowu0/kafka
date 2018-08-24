@@ -1124,6 +1124,36 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         clearBufferedDataForPausedPartitions();
     }
 
+    /**
+     * Remove completed fetches of partitions that do not belong to assigned topics
+     */
+    public void filterUnassignedTopics(Collection<String> assignedTopics) {
+        Set<TopicPartition> currentPartitions = new HashSet<>();
+        for (TopicPartition tp : subscriptions.assignedPartitions()) {
+            if (assignedTopics.contains(tp.topic())) {
+                currentPartitions.add(tp);
+            }
+        }
+        filterUnassignedPartitions(currentPartitions);
+    }
+
+    /**
+     * Remove completed fetches of partitions that do not belong to assigned partitions
+     */
+    public void filterUnassignedPartitions(Set<TopicPartition> assignedPartitions) {
+        Iterator<CompletedFetch> itr = completedFetches.iterator();
+        while (itr.hasNext()) {
+            TopicPartition tp = itr.next().partition;
+            if (!assignedPartitions.contains(tp)) {
+                itr.remove();
+            }
+        }
+        if (nextInLineRecords != null && !assignedPartitions.contains(nextInLineRecords.partition)) {
+            nextInLineRecords.drain();
+            nextInLineRecords = null;
+        }
+    }
+
     public static Sensor throttleTimeSensor(Metrics metrics, FetcherMetricsRegistry metricsRegistry) {
         Sensor fetchThrottleTimeSensor = metrics.sensor("fetch-throttle-time");
         fetchThrottleTimeSensor.add(metrics.metricInstance(metricsRegistry.fetchThrottleTimeAvg), new Avg());

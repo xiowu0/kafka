@@ -66,7 +66,6 @@ import org.apache.kafka.common.requests.FetchResponse;
 import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.ApiVersionsResponse;
 import org.apache.kafka.common.requests.FetchRequest;
-import org.apache.kafka.common.requests.FetchRequest.PartitionData;
 import org.apache.kafka.common.requests.IsolationLevel;
 import org.apache.kafka.common.requests.ListOffsetRequest;
 import org.apache.kafka.common.requests.ListOffsetResponse;
@@ -206,6 +205,42 @@ public class FetcherTest {
             assertEquals(offset, record.offset());
             offset += 1;
         }
+    }
+
+    @Test
+    public void testClearBufferedData() {
+        subscriptions.assignFromUser(singleton(tp0));
+        subscriptions.seek(tp0, 0);
+
+        // normal fetch
+        assertEquals(1, fetcher.sendFetches());
+        assertFalse(fetcher.hasCompletedFetches());
+
+        client.prepareResponse(fullFetchResponse(tp0, this.records, Errors.NONE, 100L, 0));
+        consumerClient.poll(0);
+        assertTrue(fetcher.hasCompletedFetches());
+
+        fetcher.filterUnassignedPartitions(Collections.EMPTY_SET);
+        assertFalse(fetcher.hasCompletedFetches());
+    }
+
+    @Test
+    public void clearBufferedDataForTopicPartitions() {
+        subscriptions.assignFromUser(singleton(tp0));
+        subscriptions.seek(tp0, 0);
+
+        // normal fetch
+        assertEquals(1, fetcher.sendFetches());
+        assertFalse(fetcher.hasCompletedFetches());
+
+        client.prepareResponse(fullFetchResponse(tp0, this.records, Errors.NONE, 100L, 0));
+        consumerClient.poll(0);
+        assertTrue(fetcher.hasCompletedFetches());
+        Set<TopicPartition> newAssignedTopicPartitions = new HashSet<>();
+        newAssignedTopicPartitions.add(tp1);
+
+        fetcher.filterUnassignedPartitions(newAssignedTopicPartitions);
+        assertFalse(fetcher.hasCompletedFetches());
     }
 
     @Test
