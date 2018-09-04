@@ -895,7 +895,8 @@ object TestUtils extends Logging {
   def createLogManager(logDirs: Seq[File] = Seq.empty[File],
                        defaultConfig: LogConfig = LogConfig(),
                        cleanerConfig: CleanerConfig = CleanerConfig(enableCleaner = false),
-                       time: MockTime = new MockTime()): LogManager = {
+                       time: MockTime = new MockTime(),
+                       orphanPartitionRemovalDelayMs: Long = -1): LogManager = {
     new LogManager(logDirs = logDirs.map(_.getAbsoluteFile),
                    initialOfflineDirs = Array.empty[File],
                    topicConfigs = Map(),
@@ -907,6 +908,7 @@ object TestUtils extends Logging {
                    flushStartOffsetCheckpointMs = 10000L,
                    retentionCheckMs = 1000L,
                    maxPidExpirationMs = 60 * 60 * 1000,
+                   orphanPartitionRemovalDelayMs = orphanPartitionRemovalDelayMs,
                    scheduler = time.scheduler,
                    time = time,
                    brokerState = BrokerState(),

@@ -57,6 +57,7 @@ class LogManager(logDirs: Seq[File],
                  val flushStartOffsetCheckpointMs: Long,
                  val retentionCheckMs: Long,
                  val maxPidExpirationMs: Int,
+                 val orphanPartitionRemovalDelayMs: Long,
                  scheduler: Scheduler,
                  val brokerState: BrokerState,
                  brokerTopicStats: BrokerTopicStats,
@@ -76,6 +77,9 @@ class LogManager(logDirs: Seq[File],
   private val futureLogs = new Pool[TopicPartition, Log]()
   // Each element in the queue contains the log object to be deleted and the time it is scheduled for deletion.
   private val logsToBeDeleted = new LinkedBlockingQueue[(Log, Long)]()
+  private val orphanLogs = new Pool[TopicPartition, Log]()
+  private var orphanPartitionRemovalScheduled = false
+  @volatile private var orphanPartitionInited = false
 
   private val _liveLogDirs: ConcurrentLinkedQueue[File] = createAndValidateLogDirs(logDirs, initialOfflineDirs)
   @volatile private var _currentDefaultConfig = initialDefaultConfig
@@ -109,6 +113,7 @@ class LogManager(logDirs: Seq[File],
   }
 
   loadLogs()
+  initOrphanLogs()
 
   // public, so we can access this from kafka.admin.DeleteTopicTest
   val cleaner: LogCleaner =
@@ -133,6 +138,24 @@ class LogManager(logDirs: Seq[File],
       Map("logDirectory" -> dir.getAbsolutePath)
     )
   }
+
+  val orphanLogPartitionCount = newGauge(
+    "OrphanLogPartitionCount",
+    new Gauge[Int] {
+      def value = if (orphanPartitionInited) orphanLogs.size else 0
+    }
+  )
+
+  val orphanLogPartitionSize = newGauge(
+    "OrphanLogPartitionSize",
+    new Gauge[Long] {
+      def value = {
+        if (orphanPartitionInited) {
+          orphanLogs.values.map(_.size).sum
+        } else 0L
+      }
+    }
+  )
 
   /**
    * Create and check validity of the given directories that are not in the given offline directories, specifically:
@@ -384,6 +407,16 @@ class LogManager(logDirs: Seq[File],
     info(s"Logs loading complete in ${time.milliseconds - startMs} ms.")
   }
 
+  private def initOrphanLogs() ={
+    futureLogs.foreach {
+      case(topicPartition, log) =>
+        orphanLogs.put(topicPartition, log)
+    }
+    currentLogs.foreach {
+      case(topicPartition, log) =>
+        orphanLogs.put(topicPartition, log)
+    }
+  }
   /**
    *  Start the background threads to flush logs and do log cleanup
    */
@@ -431,6 +464,9 @@ class LogManager(logDirs: Seq[File],
     for (dir <- logDirs) {
       removeMetric("LogDirectoryOffline", Map("logDirectory" -> dir.getAbsolutePath))
     }
+
+    removeMetric("OrphanLogPartitionCount")
+    removeMetric("OrphanLogPartitionSize")
 
     val threadPools = ArrayBuffer.empty[ExecutorService]
     val jobs = mutable.Map.empty[File, Seq[Future[_]]]
@@ -809,6 +845,22 @@ class LogManager(logDirs: Seq[File],
     }
   }
 
+  def handleAsyncDelete(topicPartition: TopicPartition, removedLog: Log, isFuture: Boolean = false): Unit = {
+    if (removedLog != null) {
+      //We need to wait until there is no more cleaning task on the log to be deleted before actually deleting it.
+      if (cleaner != null && !isFuture) {
+        cleaner.abortCleaning(topicPartition)
+        cleaner.updateCheckpoints(removedLog.dir.getParentFile)
+      }
+      removedLog.renameDir(Log.logDeleteDirName(topicPartition))
+      checkpointLogRecoveryOffsetsInDir(removedLog.dir.getParentFile)
+      checkpointLogStartOffsetsInDir(removedLog.dir.getParentFile)
+      addLogToBeDeleted(removedLog)
+      info(s"Log for partition ${removedLog.topicPartition} is renamed to ${removedLog.dir.getAbsolutePath} and is scheduled for deletion")
+    } else if (offlineLogDirs.nonEmpty) {
+      throw new KafkaStorageException("Failed to delete log for " + topicPartition + " because it may be in one of the offline directories " + offlineLogDirs.mkString(","))
+    }
+  }
   /**
     * Rename the directory of the given topic-partition "logdir" as "logdir.uuid.delete" and
     * add it in the queue for deletion.
@@ -824,20 +876,7 @@ class LogManager(logDirs: Seq[File],
       else
         currentLogs.remove(topicPartition)
     }
-    if (removedLog != null) {
-      //We need to wait until there is no more cleaning task on the log to be deleted before actually deleting it.
-      if (cleaner != null && !isFuture) {
-        cleaner.abortCleaning(topicPartition)
-        cleaner.updateCheckpoints(removedLog.dir.getParentFile)
-      }
-      removedLog.renameDir(Log.logDeleteDirName(topicPartition))
-      checkpointLogRecoveryOffsetsInDir(removedLog.dir.getParentFile)
-      checkpointLogStartOffsetsInDir(removedLog.dir.getParentFile)
-      addLogToBeDeleted(removedLog)
-      info(s"Log for partition ${removedLog.topicPartition} is renamed to ${removedLog.dir.getAbsolutePath} and is scheduled for deletion")
-    } else if (offlineLogDirs.nonEmpty) {
-      throw new KafkaStorageException("Failed to delete log for " + topicPartition + " because it may be in one of the offline directories " + offlineLogDirs.mkString(","))
-    }
+    handleAsyncDelete(topicPartition, removedLog, isFuture = isFuture)
     removedLog
   }
 
@@ -881,6 +920,10 @@ class LogManager(logDirs: Seq[File],
    * Get all the partition logs
    */
   def allLogs: Iterable[Log] = currentLogs.values ++ futureLogs.values
+  /**
+    * Get all the orphan logs
+    */
+  def allOrphanLogs: Iterable[Log] = orphanLogs.values
 
   def logsByTopic(topic: String): Seq[Log] = {
     (currentLogs.toList ++ futureLogs.toList).filter { case (topicPartition, _) =>
@@ -925,6 +968,81 @@ class LogManager(logDirs: Seq[File],
       }
     }
   }
+
+  def updateOrphanLogs(topicPartitions: Iterable[TopicPartition]): Unit = {
+    if (orphanLogs.nonEmpty) {
+
+      topicPartitions.foreach(orphanLogs.remove(_))
+
+      if (!orphanPartitionInited)
+        orphanPartitionInited = true
+
+      if (orphanLogs.nonEmpty && orphanPartitionRemovalDelayMs >= 0 && !orphanPartitionRemovalScheduled) {
+        // schedule the actual deletion
+        orphanPartitionRemovalScheduled = true
+        try {
+          scheduler.schedule("kafka-delete-orphan-logs", // will be rescheduled after each delete logs with a dynamic period
+            removeOrphanPartitions _,
+            delay = orphanPartitionRemovalDelayMs,
+            unit = TimeUnit.MILLISECONDS)
+        } catch {
+          case e: Throwable =>
+            if (scheduler.isStarted) {
+              error(s"Failed to schedule orphan partition removal thread", e)
+            }
+        }
+      }
+    }
+  }
+
+  def removeOrphanPartitions(): Unit = {
+    val now = time.milliseconds()
+    logCreationOrDeletionLock synchronized {
+      orphanLogs.filter {
+        case (_, log) =>
+          val nonRetentionSegments = log.logSegments.filter {
+            case (logSegment) =>
+              if (now - logSegment.largestTimestamp > currentDefaultConfig.retentionMs)
+                false
+              else
+                true
+          }
+          if (nonRetentionSegments.nonEmpty)
+            false
+          else true
+      }.foreach {
+        case (topicPartition, _) =>
+          try {
+            val removedCurrentLog: Log = currentLogs.remove(topicPartition)
+            val removedFutureLog: Log = futureLogs.remove(topicPartition)
+            if (removedCurrentLog != null)
+              handleAsyncDelete(topicPartition, removedCurrentLog)
+            if (removedFutureLog != null)
+              handleAsyncDelete(topicPartition, removedFutureLog, isFuture = true)
+          } catch {
+            case e: KafkaStorageException =>
+              error("Error removing orphan partition " + topicPartition.topic, e)
+          } finally {
+            orphanLogs.remove(topicPartition)
+          }
+      }
+    }
+
+    if (orphanLogs.nonEmpty) {
+      // schedule another run
+      try {
+        scheduler.schedule("kafka-delete-orphan-logs",
+          removeOrphanPartitions _,
+          delay = orphanPartitionRemovalDelayMs,
+          unit = TimeUnit.MILLISECONDS)
+      } catch {
+        case e: Throwable =>
+          if (scheduler.isStarted) {
+            error(s"Failed to schedule next run of orphan partition removal thread", e)
+          }
+      }
+    }
+  }
 }
 
 object LogManager {
@@ -961,6 +1079,7 @@ object LogManager {
       flushStartOffsetCheckpointMs = config.logFlushStartOffsetCheckpointIntervalMs,
       retentionCheckMs = config.logCleanupIntervalMs,
       maxPidExpirationMs = config.transactionIdExpirationMs,
+      orphanPartitionRemovalDelayMs = config.autoOrphanPartitionRemovalDelayMs,
       scheduler = kafkaScheduler,
       brokerState = brokerState,
       brokerTopicStats = brokerTopicStats,
