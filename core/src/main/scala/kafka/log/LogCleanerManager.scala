@@ -32,7 +32,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.errors.KafkaStorageException
 
-import scala.collection.{immutable, mutable}
+import scala.collection.{Iterable, immutable, mutable}
 
 private[log] sealed trait LogCleaningState
 private[log] case object LogCleaningInProgress extends LogCleaningState
@@ -49,7 +49,7 @@ private[log] case object LogCleaningPaused extends LogCleaningState
  */
 private[log] class LogCleanerManager(val logDirs: Seq[File],
                                      val logs: Pool[TopicPartition, Log],
-                                     val logDirFailureChannel: LogDirFailureChannel, 
+                                     val logDirFailureChannel: LogDirFailureChannel,
                                      val retentionCheckMs: Long) extends Logging with KafkaMetricsGroup {
 
   import LogCleanerManager._
@@ -153,7 +153,29 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   }
 
   /**
-    * Find any logs that have compact enabled with no deletion in progress
+    * Pause logs cleaning for logs that do not have compaction enabled
+    * and do not have other deletion or compaction in progress.
+    * This is to handle potential race between retention and cleaner threads when users
+    * switch topic configuration between compacted and non-compacted topic.
+    * @return retention logs that have log cleaning successfully paused
+    */
+  def pauseCleaningForNonCompactedPartitions(): Iterable[(TopicPartition, Log)] = {
+    inLock(lock) {
+      val deletableLogs = logs.filter {
+        case (_, log) => !log.config.compact // pick non-compacted logs
+      }.filterNot {
+        case (topicPartition, _) => inProgress.contains(topicPartition) // skip any logs already in-progress
+      }
+
+      deletableLogs.foreach {
+        case (topicPartition, _) => inProgress.put(topicPartition, LogCleaningPaused)
+      }
+      deletableLogs
+    }
+  }
+
+  /**
+    * Find any logs that have compact and delete enabled
     */
   def deletableLogs(): Iterable[(TopicPartition, Log)] = {
     inLock(lock) {
@@ -180,7 +202,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   def abortCleaning(topicPartition: TopicPartition) {
     inLock(lock) {
       abortAndPauseCleaning(topicPartition)
-      resumeCleaning(topicPartition)
+      resumeCleaning(Seq(topicPartition))
     }
     info(s"The cleaning for partition $topicPartition is aborted")
   }
@@ -216,23 +238,25 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
   }
 
   /**
-   *  Resume the cleaning of a paused partition. This call blocks until the cleaning of a partition is resumed.
-   */
-  def resumeCleaning(topicPartition: TopicPartition) {
+    *  Resume the cleaning of paused partitions.
+    */
+  def resumeCleaning(topicPartitions: Iterable[TopicPartition]){
     inLock(lock) {
-      inProgress.get(topicPartition) match {
-        case None =>
-          throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is not paused.")
-        case Some(state) =>
-          state match {
-            case LogCleaningPaused =>
-              inProgress.remove(topicPartition)
-            case s =>
-              throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is in $s state.")
+      topicPartitions.foreach {
+        topicPartition =>
+          inProgress.get(topicPartition) match {
+            case None =>
+              throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is not paused.")
+            case Some(state) =>
+              state match {
+                case LogCleaningPaused =>
+                  inProgress.remove(topicPartition)
+                case s =>
+                  throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is in $s state.")
+              }
           }
       }
     }
-    info(s"Compaction for partition $topicPartition is resumed")
   }
 
   /**
@@ -332,18 +356,21 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
     }
   }
 
-  def doneDeleting(topicPartition: TopicPartition): Unit = {
+  def doneDeleting(topicPartitions: Iterable[TopicPartition]): Unit = {
     inLock(lock) {
-      inProgress.get(topicPartition) match {
-        case Some(LogCleaningInProgress) =>
-          inProgress.remove(topicPartition)
-        case Some(LogCleaningAborted) =>
-          inProgress.put(topicPartition, LogCleaningPaused)
-          pausedCleaningCond.signalAll()
-        case None =>
-          throw new IllegalStateException(s"State for partition $topicPartition should exist.")
-        case s =>
-          throw new IllegalStateException(s"In-progress partition $topicPartition cannot be in $s state.")
+      topicPartitions.foreach {
+        topicPartition =>
+          inProgress.get(topicPartition) match {
+            case Some(LogCleaningInProgress) =>
+              inProgress.remove(topicPartition)
+            case Some(LogCleaningAborted) =>
+              inProgress.put(topicPartition, LogCleaningPaused)
+              pausedCleaningCond.signalAll()
+            case None =>
+              throw new IllegalStateException(s"State for partition $topicPartition should exist.")
+            case s =>
+              throw new IllegalStateException(s"In-progress partition $topicPartition cannot be in $s state.")
+          }
       }
     }
   }
