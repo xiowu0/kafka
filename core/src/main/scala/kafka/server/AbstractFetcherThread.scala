@@ -64,6 +64,7 @@ abstract class AbstractFetcherThread(name: String,
   val fetcherStats = new FetcherStats(metricId)
   val fetcherLagStats = new FetcherLagStats(metricId)
   var lastFetchTimeMs = System.currentTimeMillis
+  @volatile var idle = false
 
   /* callbacks to be defined in subclass */
 
@@ -387,13 +388,8 @@ abstract class AbstractFetcherThread(name: String,
         partitionStates.remove(topicPartition)
         fetcherLagStats.unregister(topicPartition.topic, topicPartition.partition)
       }
+      idle = partitionStates.size() <= 0
     } finally partitionMapLock.unlock()
-  }
-
-  def partitionCount() = {
-    partitionMapLock.lockInterruptibly()
-    try partitionStates.size
-    finally partitionMapLock.unlock()
   }
 
   private[server] def partitionsAndOffsets: Map[TopicPartition, BrokerAndInitialOffset] = inLock(partitionMapLock) {
