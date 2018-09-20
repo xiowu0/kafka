@@ -1090,8 +1090,8 @@ object GroupMetadataManager {
                                        apiVersion: ApiVersion): Array[Byte] = {
     // generate commit value according to schema version
     val (version, value) = {
-      if (apiVersion < KAFKA_2_1_IV0 || offsetAndMetadata.expireTimestamp.nonEmpty)
-        // if an older version of the API is used, or if an explicit expiration is provided, use the older schema
+      if (offsetAndMetadata.expireTimestamp.nonEmpty)
+        // Either an older version of the API is used or an explicit expiration is provided.
         (1.toShort, new Struct(OFFSET_COMMIT_VALUE_SCHEMA_V1))
       else
         (2.toShort, new Struct(OFFSET_COMMIT_VALUE_SCHEMA_V2))
