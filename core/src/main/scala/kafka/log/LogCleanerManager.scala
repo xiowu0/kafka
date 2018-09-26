@@ -37,16 +37,29 @@ import scala.collection.{Iterable, immutable, mutable}
 private[log] sealed trait LogCleaningState
 private[log] case object LogCleaningInProgress extends LogCleaningState
 private[log] case object LogCleaningAborted extends LogCleaningState
-private[log] case object LogCleaningPaused extends LogCleaningState
+private[log] case class LogCleaningPaused(pausedCount: Int) extends LogCleaningState
 
 /**
- *  Manage the state of each partition being cleaned.
- *  If a partition is to be cleaned, it enters the LogCleaningInProgress state.
- *  While a partition is being cleaned, it can be requested to be aborted and paused. Then the partition first enters
- *  the LogCleaningAborted state. Once the cleaning task is aborted, the partition enters the LogCleaningPaused state.
- *  While a partition is in the LogCleaningPaused state, it won't be scheduled for cleaning again, until cleaning is
- *  requested to be resumed.
- */
+  * This class manages the state of each partition being cleaned.
+  * LogCleaningState defines the cleaning states that a TopicPartition can be in.
+  * 1. None : No cleaning state in a TopicPartition
+  * 2. LogCleaningInProgress   : The cleaning is currently in progress. It can only be transited from None State by logcleaner.
+  *                              It can be transited to None State by logcleaner (when cleanning finished) or to
+  *                              LogCleaningAborted state by topic deletion, log truncation, or partition movement(future log).
+  *                              However, there should not be more than one entity that tries to move this state to LogCleaningAborted
+  *                              at the same time.  Logcleaner only starts working on a TopicPartition if it can put the TopicPartition
+  *                              in this state.
+  * 3. LogCleaningAborted      : The cleaning is aborted. It is transited from LogCleaningInProgress by aborting operation (see previous state)
+  *                              and can be moved to LogCleaningPaused(1) by logcleaner. Aborting already aborted
+  *                              TopicPartition is not allowed.
+  * 2. LogCleaningPaused(i)    : The cleaning is paused i times. LogCleaningPaused(1) is transited from LogCleaningAborted by logcleaner
+  *                              or from None state by log retention, log truncation, and partition movement.  LogCleaningPaused(i) can
+  *                              be moved to LogCleaningPaused(i+1) (by aborting an already paused topic partition)
+  *                              or LogCleaningPaused(i-1) (by resumeCleaning). If the end state is LogCleaningPaused(0),
+  *                              the state will be removed and becomes a None State.  log retention, topic deletion, log truncation,
+  *                              and partition movement only starts working on a TopicPartition if it can put the TopicPartition
+  *                              in LogCleaningPaused(i) state.
+  */
 private[log] class LogCleanerManager(val logDirs: Seq[File],
                                      val logs: Pool[TopicPartition, Log],
                                      val logDirFailureChannel: LogDirFailureChannel,
@@ -168,7 +181,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
       }
 
       deletableLogs.foreach {
-        case (topicPartition, _) => inProgress.put(topicPartition, LogCleaningPaused)
+        case (topicPartition, _) => inProgress.put(topicPartition, LogCleaningPaused(1))
       }
       deletableLogs
     }
@@ -216,22 +229,23 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
    *     throws a LogCleaningAbortedException to stop the cleaning task.
    *  4. When the cleaning task is stopped, doneCleaning() is called, which sets the state of the partition as paused.
    *  5. abortAndPauseCleaning() waits until the state of the partition is changed to paused.
+   *  6. If the partition is already paused (by log retention), a new call to this function
+   *     will increase the paused count by one.
    */
   def abortAndPauseCleaning(topicPartition: TopicPartition) {
     inLock(lock) {
       inProgress.get(topicPartition) match {
         case None =>
-          inProgress.put(topicPartition, LogCleaningPaused)
-        case Some(state) =>
-          state match {
-            case LogCleaningInProgress =>
-              inProgress.put(topicPartition, LogCleaningAborted)
-            case LogCleaningPaused =>
-            case s =>
-              throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be aborted and paused since it is in $s state.")
-          }
+          inProgress.put(topicPartition, LogCleaningPaused(1))
+        case Some(LogCleaningInProgress) =>
+          inProgress.put(topicPartition, LogCleaningAborted)
+        case Some(LogCleaningPaused(count)) =>
+          inProgress.put(topicPartition, LogCleaningPaused(count + 1))
+        case Some(s) =>
+          throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be aborted and paused since it is in $s state.")
       }
-      while (!isCleaningInState(topicPartition, LogCleaningPaused))
+
+      while(!isCleaningInStatePaused(topicPartition))
         pausedCleaningCond.await(100, TimeUnit.MILLISECONDS)
     }
     info(s"The cleaning for partition $topicPartition is aborted and paused")
@@ -239,6 +253,9 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
 
   /**
     *  Resume the cleaning of paused partitions.
+    *  If the partition is paused by log retention and then paused again by
+    *  topic deletion, truncation or partition movement, each call of this function will undo
+    *  one pause.
     */
   def resumeCleaning(topicPartitions: Iterable[TopicPartition]){
     inLock(lock) {
@@ -249,8 +266,10 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
               throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is not paused.")
             case Some(state) =>
               state match {
-                case LogCleaningPaused =>
+                case LogCleaningPaused(count) if count == 1 =>
                   inProgress.remove(topicPartition)
+                case LogCleaningPaused(count) if count > 1 =>
+                  inProgress.put(topicPartition, LogCleaningPaused(count - 1))
                 case s =>
                   throw new IllegalStateException(s"Compaction for partition $topicPartition cannot be resumed since it is in $s state.")
               }
@@ -270,6 +289,22 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
           true
         else
           false
+    }
+  }
+
+  /**
+   *  Check if the cleaning for a partition is paused. The caller is expected to hold lock while making the call.
+   */
+  private def isCleaningInStatePaused(topicPartition: TopicPartition): Boolean = {
+    inProgress.get(topicPartition) match {
+      case None => false
+      case Some(state) =>
+        state match {
+          case LogCleaningPaused(s) =>
+            true
+          case _ =>
+            false
+        }
     }
   }
 
@@ -346,7 +381,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
           updateCheckpoints(dataDir, Option(topicPartition, endOffset))
           inProgress.remove(topicPartition)
         case Some(LogCleaningAborted) =>
-          inProgress.put(topicPartition, LogCleaningPaused)
+          inProgress.put(topicPartition, LogCleaningPaused(1))
           pausedCleaningCond.signalAll()
         case None =>
           throw new IllegalStateException(s"State for partition $topicPartition should exist.")
@@ -364,7 +399,7 @@ private[log] class LogCleanerManager(val logDirs: Seq[File],
             case Some(LogCleaningInProgress) =>
               inProgress.remove(topicPartition)
             case Some(LogCleaningAborted) =>
-              inProgress.put(topicPartition, LogCleaningPaused)
+              inProgress.put(topicPartition, LogCleaningPaused(1))
               pausedCleaningCond.signalAll()
             case None =>
               throw new IllegalStateException(s"State for partition $topicPartition should exist.")

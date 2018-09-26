@@ -142,6 +142,68 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
   }
 
   /**
+    * test log race condition between log retention,
+    * topic deletion, and log truncation
+    */
+  @Test
+  def testLogsRaceCondition(): Unit = {
+    val records = TestUtils.singletonRecords("test".getBytes, key="test".getBytes)
+    val log: Log = createLog(records.sizeInBytes * 5, LogConfig.Delete)
+    val cleanerManager: LogCleanerManager = createCleanerManager(log)
+
+    log.appendAsLeader(records, leaderEpoch = 0)
+    log.roll()
+    log.appendAsLeader(records, leaderEpoch = 0)
+    log.onHighWatermarkIncremented(2L)
+
+    val numOfRun = 100
+
+    def logRetention(): Unit = {
+      for (i <- 0 until numOfRun) {
+        val retetionLogs = cleanerManager.pauseCleaningForNonCompactedPartitions()
+        Thread.`yield`()
+        cleanerManager.resumeCleaning(retetionLogs.map(_._1))
+        Thread.`yield`()
+      }
+    }
+
+    def topicDetention(): Unit = {
+      for (i <- 0 until numOfRun) {
+        cleanerManager.abortCleaning(log.topicPartition)
+        Thread.`yield`()
+      }
+    }
+
+    // log truncation is mutually exclusive from topic deletion in practice
+    // since topic deletion will stop all fetch threads that perform log truncation.
+    def logTruncation(): Unit = {
+      for (i <- 0 until numOfRun) {
+        cleanerManager.abortAndPauseCleaning(log.topicPartition)
+        Thread.`yield`()
+        cleanerManager.resumeCleaning(Seq(log.topicPartition))
+        Thread.`yield`()
+      }
+    }
+
+    assertTrue(cleanerManager.cleaningState(log.topicPartition).isEmpty)
+
+    // run log retention and log truncation in parallel
+    TestUtils.assertConcurrent("Concurrent log race condition test",
+      Seq(logRetention, logTruncation),
+      60000)
+
+    // make sure state is cleared at the end
+    assertTrue(cleanerManager.cleaningState(log.topicPartition).isEmpty)
+
+    // log retention and topic deletion
+    TestUtils.assertConcurrent("Concurrent log race condition test",
+      Seq(logRetention, topicDetention),
+      60000)
+
+    assertTrue(cleanerManager.cleaningState(log.topicPartition).isEmpty)
+  }
+
+  /**
     * Test computation of cleanable range with no minimum compaction lag settings active
     */
   @Test
@@ -279,7 +341,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
     val tp = new TopicPartition("log", 0)
     intercept[IllegalStateException](cleanerManager.doneCleaning(tp, log.dir, 1))
 
-    cleanerManager.setCleaningState(tp, LogCleaningPaused)
+    cleanerManager.setCleaningState(tp, LogCleaningPaused(1))
     intercept[IllegalStateException](cleanerManager.doneCleaning(tp, log.dir, 1))
 
     cleanerManager.setCleaningState(tp, LogCleaningInProgress)
@@ -289,7 +351,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
 
     cleanerManager.setCleaningState(tp, LogCleaningAborted)
     cleanerManager.doneCleaning(tp, log.dir, 1)
-    assertEquals(LogCleaningPaused, cleanerManager.cleaningState(tp).get)
+    assertEquals(LogCleaningPaused(1), cleanerManager.cleaningState(tp).get)
     assertTrue(cleanerManager.allCleanerCheckpoints.get(tp).nonEmpty)
   }
 
@@ -303,7 +365,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
 
     intercept[IllegalStateException](cleanerManager.doneDeleting(Seq(tp)))
 
-    cleanerManager.setCleaningState(tp, LogCleaningPaused)
+    cleanerManager.setCleaningState(tp, LogCleaningPaused(1))
     intercept[IllegalStateException](cleanerManager.doneDeleting(Seq(tp)))
 
     cleanerManager.setCleaningState(tp, LogCleaningInProgress)
@@ -312,7 +374,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
 
     cleanerManager.setCleaningState(tp, LogCleaningAborted)
     cleanerManager.doneDeleting(Seq(tp))
-    assertEquals(LogCleaningPaused, cleanerManager.cleaningState(tp).get)
+    assertEquals(LogCleaningPaused(1), cleanerManager.cleaningState(tp).get)
 
   }
 
