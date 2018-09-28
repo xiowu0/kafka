@@ -524,7 +524,7 @@ class LogManager(logDirs: Seq[File],
     }
 
     if (truncated)
-      checkpointLogRecoveryOffsets()
+      checkpointLogRecoveryOffsetsWithoutDeletingSnapshotFiles()
   }
 
   /**
@@ -561,7 +561,11 @@ class LogManager(logDirs: Seq[File],
    * to avoid recovering the whole log on startup.
    */
   def checkpointLogRecoveryOffsets() {
-    liveLogDirs.foreach(checkpointLogRecoveryOffsetsInDir)
+    liveLogDirs.foreach(checkpointLogRecoveryOffsetsInDir(_))
+  }
+
+  def checkpointLogRecoveryOffsetsWithoutDeletingSnapshotFiles() {
+    liveLogDirs.foreach(checkpointLogRecoveryOffsetsInDir(_, deleteSnapshotFiles = false))
   }
 
   /**
@@ -575,14 +579,15 @@ class LogManager(logDirs: Seq[File],
   /**
    * Make a checkpoint for all logs in provided directory.
    */
-  private def checkpointLogRecoveryOffsetsInDir(dir: File): Unit = {
+  private def checkpointLogRecoveryOffsetsInDir(dir: File, deleteSnapshotFiles: Boolean = true): Unit = {
     for {
       partitionToLog <- logsByDir.get(dir.getAbsolutePath)
       checkpoint <- recoveryPointCheckpoints.get(dir)
     } {
       try {
         checkpoint.write(partitionToLog.mapValues(_.recoveryPoint))
-        allLogs.foreach(_.deleteSnapshotsAfterRecoveryPointCheckpoint())
+        if (deleteSnapshotFiles)
+          allLogs.foreach(_.deleteSnapshotsAfterRecoveryPointCheckpoint())
       } catch {
         case e: IOException =>
           logDirFailureChannel.maybeAddOfflineLogDir(dir.getAbsolutePath, s"Disk error while writing to recovery point " +
