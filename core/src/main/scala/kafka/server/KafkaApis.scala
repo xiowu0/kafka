@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Collections, Properties}
 
 import kafka.admin.{AdminUtils, RackAwareMode}
-import kafka.api.{ApiVersion, KAFKA_0_11_0_IV0, KAFKA_2_1_IV0}
+import kafka.api.{ApiVersion, KAFKA_0_11_0_IV0}
 import kafka.cluster.Partition
 import kafka.common.{OffsetAndMetadata, OffsetMetadata}
 import kafka.controller.KafkaController
@@ -46,7 +46,7 @@ import org.apache.kafka.common.internals.Topic.{GROUP_METADATA_TOPIC_NAME, TRANS
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.{ListenerName, Send}
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
-import org.apache.kafka.common.record.{BaseRecords, ControlRecordType, EndTransactionMarker, LazyDownConversionRecords, MemoryRecords, MultiRecordsSend, RecordBatch, RecordConversionStats, RecordVersion, Records}
+import org.apache.kafka.common.record.{BaseRecords, ControlRecordType, EndTransactionMarker, LazyDownConversionRecords, MemoryRecords, MultiRecordsSend, RecordBatch, RecordConversionStats, Records, RecordVersion}
 import org.apache.kafka.common.requests.CreateAclsResponse.AclCreationResponse
 import org.apache.kafka.common.requests.DeleteAclsResponse.{AclDeletionResult, AclFilterResponse}
 import org.apache.kafka.common.requests.DescribeLogDirsResponse.LogDirInfo
@@ -332,6 +332,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       } else {
         // for version 1 and beyond store offsets in offset manager
 
+        // commit timestamp is always set to now.
         // "default" expiration timestamp is now + retention (and retention may be overridden if v2)
         // expire timestamp is computed differently for v1 and v2.
         //   - If v1 and no explicit commit timestamp is provided we treat it the same as v5.
@@ -347,17 +348,10 @@ class KafkaApis(val requestChannel: RequestChannel,
               case OffsetCommitRequest.DEFAULT_TIMESTAMP => currentTimestamp
               case customTimestamp => customTimestamp
             },
-            expireTimestamp =
-              if (header.apiVersion <= 1 ||
-                offsetCommitRequest.retentionTime == OffsetCommitRequest.DEFAULT_RETENTION_TIME) {
-                // For inter.broker.protocol.version < 2.1, expireTimestamp is expected to exist.
-                if (config.interBrokerProtocolVersion < KAFKA_2_1_IV0)
-                  Some(currentTimestamp + groupCoordinator.offsetConfig.offsetsRetentionMs)
-                else
-                  None
-              }
-              else
-                Some(currentTimestamp + offsetCommitRequest.retentionTime)
+            expireTimestamp = offsetCommitRequest.retentionTime match {
+              case OffsetCommitRequest.DEFAULT_RETENTION_TIME => None
+              case retentionTime => Some(currentTimestamp + retentionTime)
+            }
           )
         }
 
