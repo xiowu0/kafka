@@ -273,6 +273,7 @@ abstract class AbstractFetcherThread(name: String,
       }
       val existingPartitionToState = states().toMap
       partitionStates.set((existingPartitionToState ++ newPartitionToState).asJava)
+      maybeUpdateIdleFlag()
       partitionMapCond.signalAll()
     } finally partitionMapLock.unlock()
   }
@@ -293,6 +294,7 @@ abstract class AbstractFetcherThread(name: String,
         (state.topicPartition(), maybeTruncationComplete)
       }.toMap
     partitionStates.set(newStates.asJava)
+    maybeUpdateIdleFlag()
   }
 
   /**
@@ -388,7 +390,7 @@ abstract class AbstractFetcherThread(name: String,
         partitionStates.remove(topicPartition)
         fetcherLagStats.unregister(topicPartition.topic, topicPartition.partition)
       }
-      idle = partitionStates.size() <= 0
+      maybeUpdateIdleFlag()
     } finally partitionMapLock.unlock()
   }
 
@@ -396,6 +398,11 @@ abstract class AbstractFetcherThread(name: String,
     partitionStates.partitionStates.asScala.map { case state =>
       state.topicPartition -> new BrokerAndInitialOffset(sourceBroker, state.value.fetchOffset)
     }.toMap
+  }
+
+  // This method should only be called when holding the partitionMapLock
+  private def maybeUpdateIdleFlag(): Unit = {
+    idle = partitionStates.size() <= 0
   }
 
 }
