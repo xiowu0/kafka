@@ -48,6 +48,7 @@ import org.apache.kafka.common.metrics.stats.Meter;
 import org.apache.kafka.common.metrics.stats.Min;
 import org.apache.kafka.common.metrics.stats.Value;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.record.AbstractLegacyRecordBatch;
 import org.apache.kafka.common.record.BufferSupplier;
 import org.apache.kafka.common.record.ControlRecordType;
 import org.apache.kafka.common.record.InvalidRecordException;
@@ -91,6 +92,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Collections.emptyList;
+import static org.apache.kafka.common.record.RecordBatch.MAGIC_VALUE_V2;
 import static org.apache.kafka.common.serialization.ExtendedDeserializer.Wrapper.ensureExtended;
 
 /**
@@ -109,6 +111,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     private final long requestTimeoutMs;
     private final int maxPollRecords;
     private final boolean checkCrcs;
+    private final boolean enableShallowIteration;
     private final Metadata metadata;
     private final FetchManagerMetrics sensors;
     private final SubscriptionState subscriptions;
@@ -135,6 +138,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                    int fetchSize,
                    int maxPollRecords,
                    boolean checkCrcs,
+                   boolean enableShallowIteration,
                    Deserializer<K> keyDeserializer,
                    Deserializer<V> valueDeserializer,
                    Metadata metadata,
@@ -157,6 +161,7 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
         this.fetchSize = fetchSize;
         this.maxPollRecords = maxPollRecords;
         this.checkCrcs = checkCrcs;
+        this.enableShallowIteration = enableShallowIteration;
         this.keyDeserializer = ensureExtended(keyDeserializer);
         this.valueDeserializer = ensureExtended(valueDeserializer);
         this.completedFetches = new ConcurrentLinkedQueue<>();
@@ -1100,7 +1105,8 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
             ByteBuffer keyBytes = record.key();
             byte[] keyByteArray = keyBytes == null ? null : Utils.toArray(keyBytes);
             K key = keyBytes == null ? null : this.keyDeserializer.deserialize(partition.topic(), headers, keyByteArray);
-            ByteBuffer valueBytes = record.value();
+            ByteBuffer valueBytes = record.hasMagic(MAGIC_VALUE_V2) ? record.value() :
+                (enableShallowIteration ? ((AbstractLegacyRecordBatch) record).outerRecord().buffer() : record.value());
             byte[] valueByteArray = valueBytes == null ? null : Utils.toArray(valueBytes);
             V value = valueBytes == null ? null : this.valueDeserializer.deserialize(partition.topic(), headers, valueByteArray);
             return new ConsumerRecord<>(partition.topic(), partition.partition(), offset,
@@ -1272,7 +1278,11 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
                         }
                     }
 
-                    records = currentBatch.streamingIterator(decompressionBufferSupplier);
+                    if (enableShallowIteration) {
+                        records = currentBatch.shallowIterator();
+                    } else {
+                        records = currentBatch.streamingIterator(decompressionBufferSupplier);
+                    }
                 } else {
                     Record record = records.next();
                     // skip any records out of range

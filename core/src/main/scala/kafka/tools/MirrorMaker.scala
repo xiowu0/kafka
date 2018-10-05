@@ -161,6 +161,9 @@ object MirrorMaker extends Logging with KafkaMetricsGroup {
         .ofType(classOf[String])
         .defaultsTo("true")
 
+      val passthroughCompressionOpt = parser.accepts("enable.passthrough",
+        "When enabled, it avoids decompressing consumed record batches and doesn't re-compress in the producer")
+
       val helpOpt = parser.accepts("help", "Print this message.")
 
       if (args.length == 0)
@@ -210,6 +213,11 @@ object MirrorMaker extends Logging with KafkaMetricsGroup {
       // Always set producer key and value serializer to ByteArraySerializer.
       producerProps.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
       producerProps.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
+      if (options.has(passthroughCompressionOpt)) {
+        consumerProps.setProperty("enable.shallow.iterator", "true")
+        producerProps.setProperty(ProducerConfig.COMPRESSION_TYPE_CONFIG, "passthrough")
+      }
+
       producer = new MirrorMakerProducer(sync, producerProps)
 
       // Create consumers
