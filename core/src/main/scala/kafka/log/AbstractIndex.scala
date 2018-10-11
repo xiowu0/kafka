@@ -59,9 +59,9 @@ abstract class AbstractIndex[K, V](@volatile var _file: File, val baseOffset: Lo
   def file_=(f: File) {
     _file = f
   }
-  
-  
-  
+
+
+
   // Length of the index file
   @volatile
   private var _length: Option[Long] = None
@@ -164,7 +164,7 @@ abstract class AbstractIndex[K, V](@volatile var _file: File, val baseOffset: Lo
       CoreUtils.swallow(raf.close(), this)
     }
   }
-  
+
   protected def mmap: MappedByteBuffer = {
     if (!initialized) {
       inLock(lock) {
@@ -292,14 +292,7 @@ abstract class AbstractIndex[K, V](@volatile var _file: File, val baseOffset: Lo
    *         not exist
    */
   def deleteIfExists(): Boolean = {
-    inLock(lock) {
-      // On JVM, a memory mapping is typically unmapped by garbage collector.
-      // However, in some cases it can pause application threads(STW) for a long moment reading metadata from a physical disk.
-      // To prevent this, we forcefully cleanup memory mapping within proper execution which never affects API responsiveness.
-      // See https://issues.apache.org/jira/browse/KAFKA-4614 for the details.
-      if (initialized)
-        safeForceUnmap()
-    }
+    closeHandler()
     Files.deleteIfExists(file.toPath)
   }
 
@@ -320,20 +313,17 @@ abstract class AbstractIndex[K, V](@volatile var _file: File, val baseOffset: Lo
 
   /** Close the index */
   def close() {
-    if (initialized) {
-      inLock(lock) {
-        if (initialized)
-          trimToValidSize()
-      }
-    }
+    trimToValidSize()
+    closeHandler()
   }
 
   def closeHandler(): Unit = {
-    if (initialized) {
-      inLock(lock) {
-        if (initialized)
-          safeForceUnmap()
-      }
+    // On JVM, a memory mapping is typically unmapped by garbage collector.
+    // However, in some cases it can pause application threads(STW) for a long moment reading metadata from a physical disk.
+    // To prevent this, we forcefully cleanup memory mapping within proper execution which never affects API responsiveness.
+    // See https://issues.apache.org/jira/browse/KAFKA-4614 for the details.
+    inLock(lock) {
+      safeForceUnmap()
     }
   }
 
