@@ -25,6 +25,7 @@ import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
 import kafka.utils.{LogCaptureAppender, TestUtils}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.internals.PartitionStates
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.protocol.Errors._
