@@ -22,6 +22,7 @@ import kafka.cluster.{BrokerEndPoint, Cluster}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.{Cluster => JCluster}
+import org.apache.kafka.common.Node
 import org.apache.kafka.common.requests.{MetadataResponse => JMetadataResponse, MetadataRequest => JMetadataRequest}
 import org.apache.kafka.common.utils.Time
 
@@ -30,13 +31,12 @@ import collection.mutable.HashMap
 import scala.collection.mutable
 import java.util.concurrent.locks.ReentrantLock
 import scala.collection.JavaConversions._
-
 import kafka.utils.CoreUtils.inLock
 import kafka.utils.ZkUtils
 import kafka.utils.ShutdownableThread
 import kafka.client.ClientUtils
 import java.util.concurrent.atomic.AtomicInteger
-import org.apache.kafka.clients.{CommonClientConfigs, ManualMetadataUpdater}
+import org.apache.kafka.clients.ManualMetadataUpdater
 
 /**
  *  Usage:
@@ -57,14 +57,17 @@ class ConsumerFetcherManager(private val consumerIdString: String,
   private val correlationId = new AtomicInteger(0)
 
   private val isSSL = config.sslConfigs.isDefined
+  private val metadataUpdater = new ManualMetadataUpdater()
   private val metadataNetworkClientOpt = config.sslConfigs.map(sslConfigs => {
-    val bootstrapServers = seqAsJavaList(ClientUtils.getSslBrokerEndPoints(zkUtils).map(_.connectionString))
-    val addresses = org.apache.kafka.clients.ClientUtils.parseAndValidateAddresses(bootstrapServers)
-    val bootstrapNodes = JCluster.bootstrap(addresses).nodes
-    val metadataUpdater = new ManualMetadataUpdater()
-    metadataUpdater.setNodes(bootstrapNodes)
+    metadataUpdater.setNodes(bootstrapNodes())
     new SSLNetworkClient(config, metadataUpdater)
   })
+
+  private def bootstrapNodes() : java.util.List[Node] = {
+    val bootstrapServers = seqAsJavaList(ClientUtils.getSslBrokerEndPoints(zkUtils).map(_.connectionString))
+    val addresses = org.apache.kafka.clients.ClientUtils.parseAndValidateAddresses(bootstrapServers)
+    JCluster.bootstrap(addresses).nodes
+  }
 
   private class LeaderFinderThread(name: String) extends ShutdownableThread(name) {
     // thread responsible for adding the fetcher to the right broker when leader is available
@@ -125,8 +128,19 @@ class ConsumerFetcherManager(private val consumerIdString: String,
         case t: Throwable => {
             if (!isRunning)
               throw t /* If this thread is stopped, propagate this exception to kill the thread. */
-            else
+            else {
               warn("Failed to find leader for %s".format(noLeaderPartitionSet), t)
+              if (isSSL) {
+                try {
+                  metadataUpdater.setNodes(bootstrapNodes())
+                } catch {
+                  case t: Throwable => {
+                    warn("Unable to update bootstrap nodes", t)
+                    // Retry
+                  }
+                }
+              }
+            }
           }
       } finally {
         lock.unlock()
