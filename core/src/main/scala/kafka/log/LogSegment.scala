@@ -96,7 +96,7 @@ class LogSegment private[log] (val log: FileRecords,
   private var bytesSinceLastIndexEntry = 0
 
   /* The timestamp we used for time based log rolling */
-  private var rollingBasedTimestamp: Option[Long] = None
+  @volatile private var rollingBasedTimestamp: Option[Long] = None
 
   /* The maximum timestamp we see so far */
   @volatile private var _maxTimestampSoFar: Option[Long] = None

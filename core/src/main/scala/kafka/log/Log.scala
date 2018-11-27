@@ -2019,6 +2019,13 @@ class Log(@volatile var dir: File,
     }
   }
 
+  @threadsafe
+  private[log] def getFirstBatchTimestampForSegment(segment: LogSegment): Long = {
+    lock synchronized {
+      segment.getFirstBatchTimestamp()
+    }
+  }
+
   /**
    * remove deleted log metrics
    */
