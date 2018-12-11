@@ -29,7 +29,7 @@ import java.util.concurrent.{Callable, ExecutionException, Executors, TimeUnit}
 
 import javax.net.ssl.X509TrustManager
 import kafka.api._
-import kafka.cluster.{Broker, EndPoint, SessionizedBroker}
+import kafka.cluster.{Broker, EndPoint}
 import kafka.consumer.{ConsumerConfig, ConsumerTimeoutException, KafkaStream}
 import kafka.log._
 import kafka.message._
@@ -141,11 +141,13 @@ object TestUtils extends Logging {
   def boundPort(server: KafkaServer, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): Int =
     server.boundPort(ListenerName.forSecurityProtocol(securityProtocol))
 
-  def createSessionizedBroker(id: Int, host: String, port: Int, sessionId: Long, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): SessionizedBroker =
-    new SessionizedBroker(id, host, port, ListenerName.forSecurityProtocol(securityProtocol), securityProtocol, sessionId)
-
   def createBroker(id: Int, host: String, port: Int, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT): Broker =
     new Broker(id, host, port, ListenerName.forSecurityProtocol(securityProtocol), securityProtocol)
+
+  def createBrokerAndEpoch(id: Int, host: String, port: Int, securityProtocol: SecurityProtocol = SecurityProtocol.PLAINTEXT,
+                           epoch: Long = 0): (Broker, Long) = {
+    (new Broker(id, host, port, ListenerName.forSecurityProtocol(securityProtocol), securityProtocol), epoch)
+  }
 
   /**
    * Create a test config for the provided parameters.
@@ -932,14 +934,19 @@ object TestUtils extends Logging {
     controllerId.getOrElse(fail(s"Controller not elected after $timeout ms"))
   }
 
-  def waitUntilLeaderIsKnown(servers: Seq[KafkaServer], topic: String, partition: Int,
-                             timeout: Long = JTestUtils.DEFAULT_MAX_WAIT_MS): Unit = {
-    val tp = new TopicPartition(topic, partition)
-    TestUtils.waitUntilTrue(() =>
-      servers.exists { server =>
+  def waitUntilLeaderIsKnown(servers: Seq[KafkaServer],
+    tp: TopicPartition,
+    timeout: Long = JTestUtils.DEFAULT_MAX_WAIT_MS): Int = {
+    def leaderIfExists: Option[Int] = {
+      servers.find { server =>
         server.replicaManager.getPartition(tp).exists(_.leaderReplicaIfLocal.isDefined)
-      }, s"Partition $tp leaders not made yet after $timeout ms", waitTime = timeout
-    )
+      }.map(_.config.brokerId)
+    }
+
+    TestUtils.waitUntilTrue(() => leaderIfExists.isDefined,
+      s"Partition $tp leaders not made yet after $timeout ms", waitTime = timeout)
+
+    leaderIfExists.get
   }
 
   def writeNonsenseToFile(fileName: File, position: Long, size: Int) {

@@ -91,6 +91,7 @@ import org.apache.kafka.common.errors.UnsupportedByAuthenticationException;
 import org.apache.kafka.common.errors.UnsupportedForMessageFormatException;
 import org.apache.kafka.common.errors.UnsupportedSaslMechanismException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.errors.StaleBrokerEpochException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -632,7 +633,14 @@ public enum Errors {
             public ApiException build(String message) {
                 return new ListenerNotFoundException(message);
             }
-    }),;
+    }),
+    STALE_BROKER_EPOCH(77, "Broker epoch has changed",
+        new ApiExceptionBuilder() {
+            @Override
+            public ApiException build(String message) {
+                return new StaleBrokerEpochException(message);
+            }
+    });
 
     private interface ApiExceptionBuilder {
         ApiException build(String message);
