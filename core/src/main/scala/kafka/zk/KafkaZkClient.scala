@@ -903,6 +903,10 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
     createRecursive(ReassignPartitionsZNode.path, ReassignPartitionsZNode.encode(reassignment))
   }
 
+  def deletePartitionReassignment(): Unit = {
+    deletePath(ReassignPartitionsZNode.path, ZkVersion.NoVersion)
+  }
+
   /**
    * Deletes the partition reassignment znode.
    * @param expectedControllerEpochZkVersion expected controller epoch zkVersion.
