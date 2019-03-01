@@ -310,16 +310,19 @@ public class Selector implements Selectable, AutoCloseable {
      */
     @Override
     public void close() {
-        List<String> connections = new ArrayList<>(channels.keySet());
-        for (String id : connections)
-            close(id);
         try {
-            this.nioSelector.close();
-        } catch (IOException | SecurityException e) {
-            log.error("Exception closing nioSelector:", e);
+            List<String> connections = new ArrayList<>(channels.keySet());
+            for (String id : connections)
+                close(id);
+            try {
+                this.nioSelector.close();
+            } catch (IOException | SecurityException e) {
+                log.error("Exception closing nioSelector:", e);
+            }
+            channelBuilder.close();
+        } finally {
+            sensors.close();
         }
-        sensors.close();
-        channelBuilder.close();
     }
 
     /**
