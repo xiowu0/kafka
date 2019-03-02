@@ -33,7 +33,7 @@ class Replica(val brokerId: Int,
   @volatile private[this] var highWatermarkMetadata = new LogOffsetMetadata(initialHighWatermarkValue)
   // the log end offset value, kept in all replicas;
   // for local replica it is the log's end offset, for remote replicas its value is only updated by follower fetch
-  @volatile private[this] var logEndOffsetMetadata = LogOffsetMetadata.UnknownOffsetMetadata
+  @volatile private[this] var _logEndOffsetMetadata = LogOffsetMetadata.UnknownOffsetMetadata
   // the log start offset value, kept in all replicas;
   // for local replica it is the log's start offset, for remote replicas its value is only updated by follower fetch
   @volatile private[this] var _logStartOffset = Log.UnknownLogStartOffset
@@ -78,7 +78,7 @@ class Replica(val brokerId: Int,
       _lastCaughtUpTimeMs = math.max(_lastCaughtUpTimeMs, lastFetchTimeMs)
 
     logStartOffset = logReadResult.followerLogStartOffset
-    logEndOffset = logReadResult.info.fetchOffsetMetadata
+    logEndOffsetMetadata = logReadResult.info.fetchOffsetMetadata
     lastFetchLeaderLogEndOffset = logReadResult.leaderLogEndOffset
     lastFetchTimeMs = logReadResult.fetchTimeMs
   }
@@ -89,20 +89,23 @@ class Replica(val brokerId: Int,
     _lastCaughtUpTimeMs = lastCaughtUpTimeMs
   }
 
-  private def logEndOffset_=(newLogEndOffset: LogOffsetMetadata) {
+  private def logEndOffsetMetadata_=(newLogEndOffset: LogOffsetMetadata) {
     if (isLocal) {
       throw new KafkaException(s"Should not set log end offset on partition $topicPartition's local replica $brokerId")
     } else {
-      logEndOffsetMetadata = newLogEndOffset
-      trace(s"Setting log end offset for replica $brokerId for partition $topicPartition to [$logEndOffsetMetadata]")
+      _logEndOffsetMetadata = newLogEndOffset
+      trace(s"Setting log end offset for replica $brokerId for partition $topicPartition to [${_logEndOffsetMetadata}]")
     }
   }
 
-  def logEndOffset: LogOffsetMetadata =
+  def logEndOffsetMetadata: LogOffsetMetadata =
     if (isLocal)
       log.get.logEndOffsetMetadata
     else
-      logEndOffsetMetadata
+      _logEndOffsetMetadata
+
+  def logEndOffset: Long =
+    logEndOffsetMetadata.messageOffset
 
   /**
    * Increment the log start offset if the new offset is greater than the previous log start offset. The replica

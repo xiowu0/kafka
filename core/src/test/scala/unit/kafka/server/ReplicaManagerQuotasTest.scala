@@ -154,7 +154,7 @@ class ReplicaManagerQuotasTest {
     def setupDelayedFetch(isReplicaInSync: Boolean): DelayedFetch = {
       val logOffsetMetadata = new LogOffsetMetadata(messageOffset = 100L, segmentBaseOffset = 0L, relativePositionInSegment = 500)
       val replica = EasyMock.createMock(classOf[Replica])
-      EasyMock.expect(replica.logEndOffset).andReturn(logOffsetMetadata).anyTimes()
+      EasyMock.expect(replica.logEndOffsetMetadata).andReturn(logOffsetMetadata).anyTimes()
       EasyMock.replay(replica)
 
       val replicaManager = EasyMock.createMock(classOf[ReplicaManager])

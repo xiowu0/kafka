@@ -819,7 +819,7 @@ class AdminClientIntegrationTest extends IntegrationTestHarness with Logging {
       }, s"Expected follower to discover new log start offset $expectedStartOffset")
 
       TestUtils.waitUntilTrue(() => {
-        servers(followerIndex).replicaManager.getReplica(topicPartition).get.logEndOffset.messageOffset == expectedEndOffset
+        servers(followerIndex).replicaManager.getReplica(topicPartition).get.logEndOffset == expectedEndOffset
       }, s"Expected follower to catch up to log end offset $expectedEndOffset")
     }
 
@@ -863,7 +863,7 @@ class AdminClientIntegrationTest extends IntegrationTestHarness with Logging {
     // make sure we are in the expected state after delete records
     for (i <- 0 until serverCount) {
       assertEquals(3, servers(i).replicaManager.getReplica(topicPartition).get.logStartOffset)
-      assertEquals(expectedLEO, servers(i).replicaManager.getReplica(topicPartition).get.logEndOffset.messageOffset)
+      assertEquals(expectedLEO, servers(i).replicaManager.getReplica(topicPartition).get.logEndOffset)
     }
 
     // we will create another dir just for one server
@@ -878,7 +878,7 @@ class AdminClientIntegrationTest extends IntegrationTestHarness with Logging {
 
     // once replica moved, its LSO and LEO should match other replicas
     assertEquals(3, servers(0).replicaManager.getReplica(topicPartition).get.logStartOffset)
-    assertEquals(expectedLEO, servers(0).replicaManager.getReplica(topicPartition).get.logEndOffset.messageOffset)
+    assertEquals(expectedLEO, servers(0).replicaManager.getReplica(topicPartition).get.logEndOffset)
   }
 
   @Test

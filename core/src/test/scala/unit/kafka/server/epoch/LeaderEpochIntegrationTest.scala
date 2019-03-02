@@ -142,7 +142,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
 
     //Setup: we are only interested in the single partition on broker 101
     brokers = Seq(100, 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
-    def leo() = brokers(1).replicaManager.getReplica(tp).get.logEndOffset.messageOffset
+    def leo() = brokers(1).replicaManager.getReplica(tp).get.logEndOffset
     TestUtils.createTopic(zkClient, tp.topic, Map(tp.partition -> Seq(101)), brokers)
     producer = createProducer(getBrokerListStrFromServers(brokers), retries = 10, acks = -1)
 

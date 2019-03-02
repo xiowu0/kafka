@@ -94,12 +94,13 @@ class ReplicaAlterLogDirsThread(name: String,
     val partition = replicaMgr.getPartition(topicPartition).get
     val records = partitionData.toRecords
 
-    if (fetchOffset != futureReplica.logEndOffset.messageOffset)
+    if (fetchOffset != futureReplica.logEndOffset)
       throw new IllegalStateException("Offset mismatch for the future replica %s: fetched offset = %d, log end offset = %d.".format(
-        topicPartition, fetchOffset, futureReplica.logEndOffset.messageOffset))
+        topicPartition, fetchOffset, futureReplica.logEndOffset))
 
     partition.appendRecordsToFollowerOrFutureReplica(records, isFuture = true)
-    val futureReplicaHighWatermark = futureReplica.logEndOffset.messageOffset.min(partitionData.highWatermark)
+    val futureReplicaHighWatermark = futureReplica.logEndOffset.min(partitionData.highWatermark)
+
     futureReplica.highWatermark = new LogOffsetMetadata(futureReplicaHighWatermark)
     futureReplica.maybeIncrementLogStartOffset(partitionData.logStartOffset)
 
@@ -113,20 +114,20 @@ class ReplicaAlterLogDirsThread(name: String,
     val futureReplica = replicaMgr.getReplicaOrException(topicPartition, Request.FutureLocalReplicaId)
     val currentReplica = replicaMgr.getReplicaOrException(topicPartition)
     val partition = replicaMgr.getPartition(topicPartition).get
-    val logEndOffset: Long = currentReplica.logEndOffset.messageOffset
+    val logEndOffset: Long = currentReplica.logEndOffset
 
-    if (logEndOffset < futureReplica.logEndOffset.messageOffset) {
+    if (logEndOffset < futureReplica.logEndOffset) {
       warn("Future replica for partition %s reset its fetch offset from %d to current replica's latest offset %d"
-        .format(topicPartition, futureReplica.logEndOffset.messageOffset, logEndOffset))
+        .format(topicPartition, futureReplica.logEndOffset, logEndOffset))
       partition.truncateTo(logEndOffset, isFuture = true)
       logEndOffset
     } else {
       val currentReplicaStartOffset: Long = currentReplica.logStartOffset
       warn("Future replica for partition %s reset its fetch offset from %d to current replica's start offset %d"
-        .format(topicPartition, futureReplica.logEndOffset.messageOffset, currentReplicaStartOffset))
-      val offsetToFetch = Math.max(currentReplicaStartOffset, futureReplica.logEndOffset.messageOffset)
+        .format(topicPartition, futureReplica.logEndOffset, currentReplicaStartOffset))
+      val offsetToFetch = Math.max(currentReplicaStartOffset, futureReplica.logEndOffset)
       // Only truncate the log when current replica's log start offset is greater than future replica's log end offset.
-      if (currentReplicaStartOffset > futureReplica.logEndOffset.messageOffset)
+      if (currentReplicaStartOffset > futureReplica.logEndOffset)
         partition.truncateFullyAndStartAt(currentReplicaStartOffset, isFuture = true)
       offsetToFetch
     }

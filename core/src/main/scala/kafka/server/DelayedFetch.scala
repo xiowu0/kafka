@@ -89,7 +89,7 @@ class DelayedFetch(delayMs: Long,
               else if (fetchMetadata.fetchOnlyCommitted)
                 replica.highWatermark
               else
-                replica.logEndOffset
+                replica.logEndOffsetMetadata
 
             // Go directly to the check for Case D if the message offsets are the same. If the log segment
             // has just rolled, then the high watermark offset will remain the same but be on the old segment,
