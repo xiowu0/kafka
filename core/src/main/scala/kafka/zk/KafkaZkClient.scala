@@ -52,7 +52,7 @@ import scala.collection.{Seq, mutable}
  * easier to quickly migrate away from `ZkUtils`. We should revisit this once the migration is completed and tests are
  * in place. We should also consider whether a monolithic [[kafka.zk.ZkData]] is the way to go.
  */
-class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean, time: Time) extends AutoCloseable with
+class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boolean, time: Time) extends AutoCloseable with
   Logging with KafkaMetricsGroup {
 
   override def metricName(name: String, metricTags: scala.collection.Map[String, String]): MetricName = {
@@ -1667,7 +1667,7 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
 
   private def acls(path: String): Seq[ACL] = ZkData.defaultAcls(isSecure, path)
 
-  private def retryRequestUntilConnected[Req <: AsyncRequest](request: Req, expectedControllerZkVersion: Int = ZkVersion.NoVersion): Req#Response = {
+  private[zk] def retryRequestUntilConnected[Req <: AsyncRequest](request: Req, expectedControllerZkVersion: Int = ZkVersion.NoVersion): Req#Response = {
     retryRequestsUntilConnected(Seq(request), expectedControllerZkVersion).head
   }
 
@@ -1772,14 +1772,14 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
         case code@ Code.OK => code
         case code@ Code.NONODE => code
         case code =>
-          error(s"Error while creating ephemeral at $path with return code: $code")
+          error(s"Error while deleting ephemeral node at $path with return code: $code")
           code
       }
     }
 
     private def reCreate(): Stat = {
       val codeAfterDelete = delete()
-      var codeAfterReCreate = codeAfterDelete
+      val codeAfterReCreate = codeAfterDelete
       debug(s"Result of znode ephemeral deletion at $path is: $codeAfterDelete")
       if (codeAfterDelete == Code.OK || codeAfterDelete == Code.NONODE) {
         create()
@@ -1791,10 +1791,24 @@ class KafkaZkClient private (zooKeeperClient: ZooKeeperClient, isSecure: Boolean
     private def getAfterNodeExists(): Stat = {
       val getDataRequest = GetDataRequest(path)
       val getDataResponse = retryRequestUntilConnected(getDataRequest)
+      val ephemeralOwnerId = getDataResponse.stat.getEphemeralOwner
       getDataResponse.resultCode match {
-        case Code.OK if getDataResponse.stat.getEphemeralOwner != zooKeeperClient.sessionId =>
+        // At this point, the Zookeeper session could be different (due a 'Session expired') from the one that initially
+        // registered the Broker into the Zookeeper ephemeral node, but the znode is still present in ZooKeeper.
+        // The expected behaviour is that Zookeeper server removes the ephemeral node associated with the expired session
+        // but due an already reported bug in Zookeeper (ZOOKEEPER-2985) this is not happening, so, the following check
+        // will validate if this Broker got registered with the previous (expired) session and try to register again,
+        // deleting the ephemeral node and creating it again.
+        // This code is part of the work around done in the KAFKA-7165, once ZOOKEEPER-2985 is complete, this code must
+        // be deleted.
+        case Code.OK if shouldReCreateEphemeralZNode(ephemeralOwnerId) =>
+          info(s"Was not possible to create the ephemeral at $path, node already exists and owner " +
+            s"'$ephemeralOwnerId' does not match current session '${zooKeeperClient.sessionId}'" +
+            s", trying to delete and re-create it with the newest Zookeeper session")
+          reCreate()
+        case Code.OK if ephemeralOwnerId != zooKeeperClient.sessionId =>
           error(s"Error while creating ephemeral at $path, node already exists and owner " +
-            s"'${getDataResponse.stat.getEphemeralOwner}' does not match current session '${zooKeeperClient.sessionId}'")
+            s"'$ephemeralOwnerId' does not match current session '${zooKeeperClient.sessionId}'")
           throw KeeperException.create(Code.NODEEXISTS)
         case Code.OK =>
           getDataResponse.stat
