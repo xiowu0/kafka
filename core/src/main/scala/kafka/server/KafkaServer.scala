@@ -116,6 +116,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
   var apis: KafkaApis = null
   var authorizer: Option[Authorizer] = None
+  var observer: Observer = null
   var socketServer: SocketServer = null
   var requestHandlerPool: KafkaRequestHandlerPool = null
 
@@ -304,13 +305,22 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
           authZ
         }
 
+        observer = try {
+          CoreUtils.createObject[Observer](config.ObserverClassName)
+        } catch {
+          case e: Exception =>
+            error(s"Creating observer instance from the given class name ${config.ObserverClassName} failed.", e)
+            new NoOpObserver
+        }
+        observer.configure(config.originals())
+
         val fetchManager = new FetchManager(Time.SYSTEM,
           new FetchSessionCache(config.maxIncrementalFetchSessionCacheSlots,
             KafkaServer.MIN_INCREMENTAL_FETCH_SESSION_EVICTION_MS))
 
         /* start processing requests */
         apis = new KafkaApis(socketServer.requestChannel, replicaManager, adminManager, groupCoordinator, transactionCoordinator,
-          kafkaController, zkClient, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers,
+          kafkaController, zkClient, config.brokerId, config, metadataCache, metrics, authorizer, observer, quotaManagers,
           fetchManager, brokerTopicStats, clusterId, time, tokenManager)
 
         requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, time,
@@ -606,6 +616,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         if (apis != null)
           CoreUtils.swallow(apis.close(), this)
         CoreUtils.swallow(authorizer.foreach(_.close()), this)
+
+        CoreUtils.swallow(observer.close(config.ObserverShutdownTimeoutMs, TimeUnit.MILLISECONDS), this)
+
         if (adminManager != null)
           CoreUtils.swallow(adminManager.shutdown(), this)
 

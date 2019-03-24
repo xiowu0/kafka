@@ -728,6 +728,10 @@ class KafkaConfigTest {
         case KafkaConfig.DelegationTokenExpiryTimeMsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")
         case KafkaConfig.DelegationTokenExpiryCheckIntervalMsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "0")
 
+        // Broker-side observer configs
+        case KafkaConfig.ObserverClassNameProp => // ignore since even if the class name is invalid, a NoOpObserver class is used instead
+        case KafkaConfig.ObserverShutdownTimeoutMsProp => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1", "0")
+
         case _ => assertPropertyInvalid(getBaseProperties(), name, "not_a_number", "-1")
       }
     })
