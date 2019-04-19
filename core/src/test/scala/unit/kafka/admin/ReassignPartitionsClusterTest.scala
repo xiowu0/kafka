@@ -645,16 +645,12 @@ class ReassignPartitionsClusterTest extends ZooKeeperTestHarness with Logging {
     val msgSize = 100 * 1000
     produceMessages(topicName, numMessages, acks = 0, msgSize)
 
-
     //Start rebalance which will move replica on 100 -> replica on 102
     val newAssignment = generateAssignment(zkClient, Array(101, 102), json(topicName), true)._1
 
-    // kick out reassignment
+    // Start reassignment
     ReassignPartitionsCommand.executeAssignment(zkClient, None,
       ReassignPartitionsCommand.formatAsReassignmentJson(newAssignment, Map.empty), initialThrottle)
-
-    //Check throttle config. Should be throttling replica 0 on 100 and 102 only.
-    checkThrottleConfigAddedToZK(adminZkClient, initialThrottle.interBrokerLimit, servers, topicName, Set("0:100","0:101"), Set("0:102"))
 
     // make sure all brokers have received partition reassignment request
     TestUtils.waitUntilTrue(() => servers.forall(_.getLogManager().getLog(topicPartition).isDefined),
@@ -666,7 +662,6 @@ class ReassignPartitionsClusterTest extends ZooKeeperTestHarness with Logging {
 
     //Await completion
     waitForReassignmentToComplete()
-    assertTrue(zkClient.getPartitionAssignmentForTopics(Set(topicName)).isEmpty)
   }
 
   def waitForReassignmentToComplete(pause: Long = 100L) {
