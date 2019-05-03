@@ -75,6 +75,8 @@ public class Metrics implements Closeable {
     private final ScheduledThreadPoolExecutor metricsScheduler;
     private static final Logger log = LoggerFactory.getLogger(Metrics.class);
 
+    private volatile boolean replaceOnDuplicate = false;
+
     /**
      * Create a metrics repository with no metric reporters and default configuration.
      * Expiration of Sensors is disabled.
@@ -528,7 +530,7 @@ public class Metrics implements Closeable {
                 try {
                     reporter.metricRemoval(metric);
                 } catch (Exception e) {
-                    log.error("Error when removing metric from " + reporter.getClass().getName(), e);
+                    log.error("Error when removing metric " + metricName + " from " + reporter.getClass().getName(), e);
                 }
             }
             log.trace("Removed metric named {}", metricName);
@@ -555,8 +557,16 @@ public class Metrics implements Closeable {
 
     synchronized void registerMetric(KafkaMetric metric) {
         MetricName metricName = metric.metricName();
-        if (this.metrics.containsKey(metricName))
-            throw new IllegalArgumentException("A metric named '" + metricName + "' already exists, can't register another one.");
+
+        if (this.metrics.containsKey(metricName)) {
+            if (replaceOnDuplicate) {
+                log.error("The metric " + metricName + " is being replaced since it had already been registered. Please file a bug report.");
+                removeMetric(metricName);
+            } else {
+                throw new IllegalArgumentException("A metric named '" + metricName + "' already exists, can't register another one.");
+            }
+        }
+
         this.metrics.put(metricName, metric);
         for (MetricsReporter reporter : reporters) {
             try {
@@ -629,6 +639,10 @@ public class Metrics implements Closeable {
         }
                 
         return this.metricName(template.name(), template.group(), template.description(), tags);
+    }
+
+    public void setReplaceOnDuplicateMetric(boolean value) {
+        replaceOnDuplicate = value;
     }
 
     /**
