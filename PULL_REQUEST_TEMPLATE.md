@@ -1,6 +1,9 @@
-SUMMARY (Required)
-# (1 Line)
+# Title (one Line SUMMARY)
+# for cherry-pick, add Cherry-Pick keyword to the title
+# e.g., Cherry-Pick KAFKA-7288: Fix for SslSelectorTest.testCloseConnectionInClosingState 
 
+
+# Commit message body
 DESCRIPTION (Required)
 # What/why/how was this change made?
 
