@@ -5,7 +5,7 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -23,6 +23,7 @@ import javax.security.auth.login.Configuration
 import scala.collection.JavaConverters._
 import kafka.consumer.ConsumerConfig
 import kafka.utils.{CoreUtils, TestUtils, ZKCheckedEphemeral, ZkUtils}
+import org.junit.Assert._
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.zookeeper.CreateMode
 import org.apache.zookeeper.WatchedEvent
@@ -61,7 +62,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
     super.setUp
     zkUtils = ZkUtils(zkConnect, zkSessionTimeout, zkConnectionTimeout, zkAclsEnabled.getOrElse(JaasUtils.isZkSecurityEnabled))
   }
-  
+
   @After
   override def tearDown() {
     if (zkUtils != null)
@@ -71,7 +72,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
     System.clearProperty(authProvider)
     Configuration.setConfiguration(null)
   }
-  
+
   @Test
   def testEphemeralNodeCleanup(): Unit = {
     val config = new ConsumerConfig(TestUtils.createConsumerProperties(zkConnect, "test", "1"))
@@ -79,7 +80,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
 
     try {
       zkUtils.createEphemeralPathExpectConflict("/tmp/zktest", "node created")
-    } catch {                       
+    } catch {
       case _: Exception =>
     }
 
@@ -96,7 +97,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
   /*****
    ***** Tests for ZkWatchedEphemeral
    *****/
-  
+
   /**
    * Tests basic creation
    */
@@ -105,7 +106,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
     testCreation("/zwe-test")
     testCreation("/zwe-test-parent/zwe-test")
   }
- 
+
   private def testCreation(path: String) {
     val zk = zkUtils.zkConnection.getZookeeper
     val zwe = new ZKCheckedEphemeral(path, "", zk, JaasUtils.isZkSecurityEnabled())
@@ -140,7 +141,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
 
     // Creates znode for path in the first session
     zk1.create(path, Array[Byte](), Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
-    
+
     //Bootstraps the ZKWatchedEphemeral object
     val gotException =
       try {
@@ -152,7 +153,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
     Assert.assertTrue(gotException)
     zkClient2.close()
   }
-  
+
   /**
    * Tests if succeeds with znode from the same session
    */
@@ -162,7 +163,7 @@ class ZKEphemeralTest(val secure: Boolean) extends ZooKeeperTestHarness {
     val zk = zkUtils.zkConnection.getZookeeper
     // Creates znode for path in the first session
     zk.create(path, Array[Byte](), Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)
-    
+
     val zwe = new ZKCheckedEphemeral(path, "", zk, JaasUtils.isZkSecurityEnabled())
     //Bootstraps the ZKWatchedEphemeral object
     val gotException =

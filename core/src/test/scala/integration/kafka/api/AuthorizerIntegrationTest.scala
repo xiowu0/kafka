@@ -367,7 +367,7 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
                   .setPartitionIndex(part)
                   .setCommittedOffset(0)
                   .setCommittedLeaderEpoch(RecordBatch.NO_PARTITION_LEADER_EPOCH)
-                  .setCommitTimestamp(OffsetCommitRequest.DEFAULT_TIMESTAMP)
+                  .setCommitTimestamp(org.apache.kafka.common.requests.OffsetCommitRequest.DEFAULT_TIMESTAMP)
                   .setCommittedMetadata("metadata")
               )))
           )
