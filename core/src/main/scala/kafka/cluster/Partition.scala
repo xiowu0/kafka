@@ -526,7 +526,7 @@ class Partition(val topic: String,
   /**
    * Try to complete any pending requests. This should be called without holding the leaderIsrUpdateLock.
    */
-  private def tryCompleteDelayedRequests() {
+  def tryCompleteDelayedRequests() {
     val requestKey = new TopicPartitionOperationKey(topicPartition)
     replicaManager.tryCompleteDelayedFetch(requestKey)
     replicaManager.tryCompleteDelayedProduce(requestKey)
