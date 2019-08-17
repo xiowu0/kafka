@@ -811,7 +811,7 @@ object TestUtils extends Logging {
                     msg: => String,
                     waitTimeMs: Long = JTestUtils.DEFAULT_MAX_WAIT_MS): Unit = {
     waitUntilTrue(() => {
-      consumer.poll(Duration.ofMillis(50))
+      consumer.poll(Duration.ofMillis(100))
       action()
     }, msg = msg, pause = 0L, waitTimeMs = waitTimeMs)
   }
@@ -821,7 +821,7 @@ object TestUtils extends Logging {
                                  msg: => String,
                                  waitTimeMs: Long = JTestUtils.DEFAULT_MAX_WAIT_MS): Unit = {
     waitUntilTrue(() => {
-      val records = consumer.poll(Duration.ofMillis(50))
+      val records = consumer.poll(Duration.ofMillis(100))
       action(records)
     }, msg = msg, pause = 0L, waitTimeMs = waitTimeMs)
   }
