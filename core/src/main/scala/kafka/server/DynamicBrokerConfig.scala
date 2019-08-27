@@ -82,6 +82,7 @@ object DynamicBrokerConfig {
     DynamicThreadPool.ReconfigurableConfigs ++
     Set(KafkaConfig.MetricReporterClassesProp) ++
     Set(KafkaConfig.AutoCreateTopicsEnableProp) ++
+    Set(KafkaConfig.AllowPreferredControllerFallbackProp) ++
     DynamicListenerConfig.ReconfigurableConfigs ++
     SocketServer.ReconfigurableConfigs
 
@@ -242,6 +243,7 @@ class DynamicBrokerConfig(private val kafkaConfig: KafkaConfig) extends Logging 
     addBrokerReconfigurable(new DynamicLogConfig(kafkaServer.logManager, kafkaServer))
     addBrokerReconfigurable(new DynamicListenerConfig(kafkaServer))
     addBrokerReconfigurable(kafkaServer.socketServer)
+    addBrokerReconfigurable(new DynamicAllowPreferredControllerFallback(kafkaServer))
   }
 
   def addReconfigurable(reconfigurable: Reconfigurable): Unit = CoreUtils.inWriteLock(lock) {
@@ -647,6 +649,23 @@ object DynamicThreadPool {
     KafkaConfig.NumReplicaFetchersProp,
     KafkaConfig.NumRecoveryThreadsPerDataDirProp,
     KafkaConfig.BackgroundThreadsProp)
+}
+
+class DynamicAllowPreferredControllerFallback(server: KafkaServer) extends BrokerReconfigurable {
+
+  override def reconfigurableConfigs: Set[String] = {
+    Set(KafkaConfig.AllowPreferredControllerFallbackProp)
+  }
+
+  override def validateReconfiguration(newConfig: KafkaConfig): Unit = {
+    // no additional validation is needed.
+  }
+
+  override def reconfigure(oldConfig: KafkaConfig, newConfig: KafkaConfig): Unit = {
+    if (newConfig.allowPreferredControllerFallback) {
+      server.kafkaController.enablePreferredControllerFallback
+    }
+  }
 }
 
 class DynamicThreadPool(server: KafkaServer) extends BrokerReconfigurable {

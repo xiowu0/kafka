@@ -20,6 +20,7 @@ import java.util.{Collections, Properties}
 
 import kafka.admin.AdminOperationException
 import kafka.common.TopicAlreadyMarkedForDeletionException
+import kafka.controller.KafkaController
 import kafka.log.LogConfig
 import kafka.metrics.KafkaMetricsGroup
 import kafka.utils._
@@ -47,7 +48,8 @@ import scala.collection.JavaConverters._
 class AdminManager(val config: KafkaConfig,
                    val metrics: Metrics,
                    val metadataCache: MetadataCache,
-                   val zkClient: KafkaZkClient) extends Logging with KafkaMetricsGroup {
+                   val zkClient: KafkaZkClient,
+                   val controller: KafkaController) extends Logging with KafkaMetricsGroup {
 
   this.logIdent = "[Admin Manager on Broker " + config.brokerId + "]: "
 
@@ -96,7 +98,7 @@ class AdminManager(val config: KafkaConfig,
             "Both cannot be used at the same time.")
         }
         val assignments = if (topic.assignments().isEmpty) {
-          adminZkClient.assignReplicasToAvailableBrokers(brokers, config.getMaintenanceBrokerList.toSet, topic.numPartitions, topic.replicationFactor)
+          adminZkClient.assignReplicasToAvailableBrokers(brokers, controller.noNewPartitionBrokerIds.toSet, topic.numPartitions, topic.replicationFactor)
         } else {
           val assignments = new mutable.HashMap[Int, Seq[Int]]
           // Note: we don't check that replicaAssignment contains unknown brokers - unlike in add-partitions case,
@@ -277,7 +279,7 @@ class AdminManager(val config: KafkaConfig,
 
         val updatedReplicaAssignment = adminZkClient.addPartitions(topic, existingAssignment, allBrokers,
           newPartition.totalCount, reassignment, validateOnly = validateOnly,
-          noNewPartitionBrokerIds = config.getMaintenanceBrokerList.toSet)
+          noNewPartitionBrokerIds = controller.noNewPartitionBrokerIds.toSet)
         CreatePartitionsMetadata(topic, updatedReplicaAssignment, ApiError.NONE)
       } catch {
         case e: AdminOperationException =>

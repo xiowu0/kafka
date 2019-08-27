@@ -60,6 +60,8 @@ object Defaults {
   val QueuedMaxRequests = 500
   val QueuedMaxRequestBytes = -1
   val ProducerBatchDecompressionEnable = true
+  val PreferredController = false
+  val AllowPreferredControllerFallback = true
 
   /************* Authorizer Configuration ***********/
   val AuthorizerClassName = ""
@@ -294,6 +296,9 @@ object KafkaConfig {
   val HeapDumpFolderProp = "heap.dump.folder"
   val HeapDumpTimeoutProp = "heap.dump.timeout"
   val ProducerBatchDecompressionEnableProp = "producer.batch.decompression.enable"
+  val PreferredControllerProp = "preferred.controller"
+  val AllowPreferredControllerFallbackProp = "allow.preferred.controller.fallback"
+
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameProp = "authorizer.class.name"
 
@@ -541,6 +546,8 @@ object KafkaConfig {
   val HeapDumpFolderDoc = "The Folder under which heap dumps will be written by the watchdog"
   val HeapDumpTimeoutDoc = "The max amount of time (in millis) to wait for heap dump to complete before halting regardless"
   val ProducerBatchDecompressionEnableDoc = "Decompress batch sent by producer to perform verification of individual records inside the batch"
+  val PreferredControllerDoc = "Specifies whether the broker is a dedicated controller node. If set to true, the broker is a preferred controller node."
+  val AllowPreferredControllerFallbackDoc = "Specifies whether a non-preferred controller node (broker) is allowed to become the controller."
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameDoc = "The authorizer class that should be used for authorization"
   /** ********* Socket Server Configuration ***********/
@@ -915,6 +922,8 @@ object KafkaConfig {
       .define(HeapDumpFolderProp, STRING, Defaults.HeapDumpFolder, LOW, HeapDumpFolderDoc)
       .define(HeapDumpTimeoutProp, LONG, Defaults.HeapDumpTimeout, LOW, HeapDumpTimeoutDoc)
       .define(ProducerBatchDecompressionEnableProp, BOOLEAN, Defaults.ProducerBatchDecompressionEnable, LOW, ProducerBatchDecompressionEnableDoc)
+      .define(PreferredControllerProp, BOOLEAN, Defaults.PreferredController, HIGH, PreferredControllerDoc)
+      .define(AllowPreferredControllerFallbackProp, BOOLEAN, Defaults.AllowPreferredControllerFallback, HIGH, AllowPreferredControllerFallbackDoc)
 
       /************* Authorizer Configuration ***********/
       .define(AuthorizerClassNameProp, STRING, Defaults.AuthorizerClassName, LOW, AuthorizerClassNameDoc)
@@ -1217,6 +1226,9 @@ class KafkaConfig(val props: java.util.Map[_, _], doLog: Boolean, dynamicConfigO
   val heapDumpFolder = new File(getString(KafkaConfig.HeapDumpFolderProp))
   val heapDumpTimeout = getLong(KafkaConfig.HeapDumpTimeoutProp)
   val producerBatchDecompressionEnable = getBoolean(KafkaConfig.ProducerBatchDecompressionEnableProp)
+
+  var preferredController = getBoolean(KafkaConfig.PreferredControllerProp)
+  def allowPreferredControllerFallback: Boolean = getBoolean(KafkaConfig.AllowPreferredControllerFallbackProp)
 
   def getNumReplicaAlterLogDirsThreads: Int = {
     val numThreads: Integer = Option(getInt(KafkaConfig.NumReplicaAlterLogDirsThreadsProp)).getOrElse(logDirs.size)
