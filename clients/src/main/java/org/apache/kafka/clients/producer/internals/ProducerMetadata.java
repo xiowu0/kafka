@@ -35,6 +35,7 @@ public class ProducerMetadata extends Metadata {
     private static final long TOPIC_EXPIRY_NEEDS_UPDATE = -1L;
     public static final long TOPIC_EXPIRY_MS = 5 * 60 * 1000;
 
+    private final boolean allowAutoTopicCreation;
     /* Topics with expiry time */
     private final Map<String, Long> topics = new HashMap<>();
     private final Logger log;
@@ -46,23 +47,26 @@ public class ProducerMetadata extends Metadata {
         LogContext logContext,
         ClusterResourceListeners clusterResourceListeners,
         Time time) {
-        this(refreshBackoffMs, metadataExpireMs, logContext, clusterResourceListeners, time, TOPIC_EXPIRY_MS);
+        this(refreshBackoffMs, metadataExpireMs, logContext, clusterResourceListeners, time, TOPIC_EXPIRY_MS, true);
     }
+
     public ProducerMetadata(long refreshBackoffMs,
                             long metadataExpireMs,
                             LogContext logContext,
                             ClusterResourceListeners clusterResourceListeners,
                             Time time,
-                            long topicExpiryMs) {
+                            long topicExpiryMs,
+                            boolean allowAutoTopicCreation) {
         super(refreshBackoffMs, metadataExpireMs, logContext, clusterResourceListeners);
         this.log = logContext.logger(ProducerMetadata.class);
         this.time = time;
         this.topicExpiryMs = topicExpiryMs;
+        this.allowAutoTopicCreation = allowAutoTopicCreation;
     }
 
     @Override
     public synchronized MetadataRequest.Builder newMetadataRequestBuilder() {
-        return new MetadataRequest.Builder(new ArrayList<>(topics.keySet()), true);
+        return new MetadataRequest.Builder(new ArrayList<>(topics.keySet()), allowAutoTopicCreation);
     }
 
     public synchronized void add(String topic) {
