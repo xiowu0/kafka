@@ -87,6 +87,8 @@ object DynamicBrokerConfig {
     SocketServer.ReconfigurableConfigs
 
   private val ClusterLevelListenerConfigs = Set(KafkaConfig.MaxConnectionsProp)
+  private val ClusterLevelConfigs = Set(KafkaConfig.AllowPreferredControllerFallbackProp) ++
+    DynamicConfig.Broker.ClusterLevelConfigs
   private val PerBrokerConfigs = DynamicSecurityConfigs  ++
     DynamicListenerConfig.ReconfigurableConfigs -- ClusterLevelListenerConfigs
   private val ListenerMechanismConfigs = Set(KafkaConfig.SaslJaasConfigProp)
@@ -153,7 +155,7 @@ object DynamicBrokerConfig {
 
   private def clusterLevelConfigs(props: Properties): Set[String] = {
     val configNames = props.asScala.keySet
-    configNames.intersect(DynamicConfig.Broker.ClusterLevelConfigs)
+    configNames.intersect(ClusterLevelConfigs)
   }
 
   private def nonDynamicConfigs(props: Properties): Set[String] = {

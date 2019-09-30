@@ -215,7 +215,7 @@ class KafkaController(val config: KafkaConfig,
   /**
     * @return brokers that don't accept new replicas, including maintenance brokers and preferred controller brokers
     */
-  def noNewPartitionBrokerIds: Seq[Int] = config.getMaintenanceBrokerList ++ controllerContext.getLivePreferredControllerIds
+  def partitionUnassignableBrokerIds: Seq[Int] = config.getMaintenanceBrokerList ++ controllerContext.getLivePreferredControllerIds
 
   /**
    * Invoked when the controller module of a Kafka server is started up. This does not assume that the current broker
@@ -807,7 +807,7 @@ class KafkaController(val config: KafkaConfig,
   // maintenance brokers that do not take new partitions
   private def rearrangePartitionReplicaAssignmentForNewTopics(topics: Set[String]) {
     try {
-      val noNewPartitionBrokers = noNewPartitionBrokerIds
+      val noNewPartitionBrokers = partitionUnassignableBrokerIds
       if (noNewPartitionBrokers.nonEmpty) {
         val newTopics = zkClient.getPartitionNodeNonExistsTopics(topics.toSet)
         val newTopicsToBeArranged = zkClient.getPartitionAssignmentForTopics(newTopics).filter {
@@ -1683,10 +1683,10 @@ class KafkaController(val config: KafkaConfig,
   }
 
   private def processRegisterBrokerAndReelect(): Unit = {
-    _brokerEpoch = zkClient.registerBroker(brokerInfo)
     if (config.preferredController) {
       zkClient.registerPreferredControllerId(brokerInfo.broker.id)
     }
+    _brokerEpoch = zkClient.registerBroker(brokerInfo)
     processReelect()
   }
 
@@ -1701,7 +1701,7 @@ class KafkaController(val config: KafkaConfig,
 
     val replicationFactor = config.defaultReplicationFactor
     val brokers = controllerContext.liveOrShuttingDownBrokers.map { sb => kafka.admin.BrokerMetadata(sb.id, sb.rack) }.toSeq
-    val noNewPartitionBrokers = noNewPartitionBrokerIds.toSet
+    val noNewPartitionBrokers = partitionUnassignableBrokerIds.toSet
 
     topicsReplicaAssignment.foreach{
       case(topic, partitionAssignment) => {

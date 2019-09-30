@@ -100,8 +100,8 @@ class KafkaZkClient private[zk] (zooKeeperClient: ZooKeeperClient, isSecure: Boo
   }
 
   /**
-    * Registers the preferred controller node in zookeeper.
-    * @param preferred controller id
+    * Registers the preferred controller id in zookeeper.
+    * @param id controller id
     */
   def registerPreferredControllerId(id: Int): Unit = {
     val path = PreferredControllerIdZNode.path(id)

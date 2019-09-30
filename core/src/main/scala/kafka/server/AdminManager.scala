@@ -98,7 +98,7 @@ class AdminManager(val config: KafkaConfig,
             "Both cannot be used at the same time.")
         }
         val assignments = if (topic.assignments().isEmpty) {
-          adminZkClient.assignReplicasToAvailableBrokers(brokers, controller.noNewPartitionBrokerIds.toSet, topic.numPartitions, topic.replicationFactor)
+          adminZkClient.assignReplicasToAvailableBrokers(brokers, controller.partitionUnassignableBrokerIds.toSet, topic.numPartitions, topic.replicationFactor)
         } else {
           val assignments = new mutable.HashMap[Int, Seq[Int]]
           // Note: we don't check that replicaAssignment contains unknown brokers - unlike in add-partitions case,
@@ -279,7 +279,7 @@ class AdminManager(val config: KafkaConfig,
 
         val updatedReplicaAssignment = adminZkClient.addPartitions(topic, existingAssignment, allBrokers,
           newPartition.totalCount, reassignment, validateOnly = validateOnly,
-          noNewPartitionBrokerIds = controller.noNewPartitionBrokerIds.toSet)
+          noNewPartitionBrokerIds = controller.partitionUnassignableBrokerIds.toSet)
         CreatePartitionsMetadata(topic, updatedReplicaAssignment, ApiError.NONE)
       } catch {
         case e: AdminOperationException =>

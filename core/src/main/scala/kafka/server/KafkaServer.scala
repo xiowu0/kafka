@@ -272,10 +272,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
         replicaManager.startup()
 
         val brokerInfo = createBrokerInfo
-        val brokerEpoch = zkClient.registerBroker(brokerInfo)
         if (config.preferredController) {
           zkClient.registerPreferredControllerId(brokerInfo.broker.id)
         }
+        val brokerEpoch = zkClient.registerBroker(brokerInfo)
 
         healthCheckScheduler = new KafkaScheduler(threads = 1, threadNamePrefix = "kafka-healthcheck-scheduler-")
         healthCheckScheduler.startup()

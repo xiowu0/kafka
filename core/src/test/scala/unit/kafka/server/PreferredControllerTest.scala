@@ -72,7 +72,7 @@ class PreferredControllerTest extends ZooKeeperTestHarness {
   }
 
   @Test
-  def testDataNodeElectionWithoutPreferredControllers(): Unit = {
+  def testElectionWithoutPreferredControllersAndNoFallback(): Unit = {
     val brokerConfigs = Seq((0, false), (1, false), (2, false))
     createBrokersWithPreferredControllers(brokerConfigs, false)
     // no broker can be elected as controller
@@ -89,7 +89,7 @@ class PreferredControllerTest extends ZooKeeperTestHarness {
 
 
   @Test
-  def testDataControllerResign(): Unit = {
+  def testNonPreferredControllerResignation(): Unit = {
     val brokerConfigs = Seq((0, false), (1, true), (2, false))
     createBrokersWithPreferredControllers(brokerConfigs, true)
 
@@ -114,6 +114,19 @@ class PreferredControllerTest extends ZooKeeperTestHarness {
     setAllowPreferredControllerFallback(true)
     // controller can be now elected among non preferred controller nodes
     TestUtils.waitUntilControllerElected(zkClient)
+  }
+
+  @Test
+  def testCurrentControllerDoesNotResignWithoutPreferredControllersAndNoFallback(): Unit = {
+    val brokerConfigs = Seq((0, false), (1, false), (2, false))
+    createBrokersWithPreferredControllers(brokerConfigs, true)
+
+    val controllerId = TestUtils.waitUntilControllerElected(zkClient)
+
+    setAllowPreferredControllerFallback(false)
+
+    // current controller does not move
+    ensureControllersInBrokers(Seq(controllerId))
   }
 
   private def ensureControllersInBrokers(brokerIds: Seq[Int], timeout: Long = 15000L): Unit = {
