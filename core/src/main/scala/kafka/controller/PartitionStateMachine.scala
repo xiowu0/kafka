@@ -355,6 +355,7 @@ class ZkPartitionStateMachine(config: KafkaConfig,
     val (invalidPartitionsForElection, validPartitionsForElection) = leaderIsrAndControllerEpochPerPartition.partition { case (_, leaderIsrAndControllerEpoch) =>
       leaderIsrAndControllerEpoch.controllerEpoch > controllerContext.epoch
     }
+
     invalidPartitionsForElection.foreach { case (partition, leaderIsrAndControllerEpoch) =>
       val failMsg = s"aborted leader election for partition $partition since the LeaderAndIsr path was " +
         s"already written by another controller. This probably means that the current controller $controllerId went through " +
@@ -431,16 +432,22 @@ class ZkPartitionStateMachine(config: KafkaConfig,
 }
 
 object PartitionLeaderElectionAlgorithms {
-  def offlinePartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int], uncleanLeaderElectionEnabled: Boolean, controllerContext: ControllerContext): Option[Int] = {
-    assignment.find(id => liveReplicas.contains(id) && isr.contains(id)).orElse {
-      if (uncleanLeaderElectionEnabled) {
-        val leaderOpt = assignment.find(liveReplicas.contains)
-        if (leaderOpt.isDefined)
-          controllerContext.stats.uncleanLeaderElectionRate.mark()
-        leaderOpt
-      } else {
-        None
-      }
+
+  /**
+   * @return Optionally, a tuple (replica, flag) where flag is a boolean indicating if unclean leader election was
+   *         used to replace the replica.
+   */
+  def offlinePartitionLeaderElection(assignment: Seq[Int], isr: Seq[Int], liveReplicas: Set[Int], uncleanLeaderElectionEnabled: Boolean): Option[(Int, Boolean)] = {
+    assignment.find(id => liveReplicas.contains(id) && isr.contains(id)) match {
+      case Some(replicaId) => Some(replicaId, false)
+      case None =>  if (uncleanLeaderElectionEnabled) {
+                     assignment.find(liveReplicas.contains) match {
+                        case Some(uncleanReplicaId) => Some(uncleanReplicaId, true)
+                        case None => None
+                      }
+                  } else {
+                    None
+                  }
     }
   }
 
