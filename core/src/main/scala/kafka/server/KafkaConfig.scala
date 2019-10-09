@@ -547,7 +547,10 @@ object KafkaConfig {
   val HeapDumpTimeoutDoc = "The max amount of time (in millis) to wait for heap dump to complete before halting regardless"
   val ProducerBatchDecompressionEnableDoc = "Decompress batch sent by producer to perform verification of individual records inside the batch"
   val PreferredControllerDoc = "Specifies whether the broker is a dedicated controller node. If set to true, the broker is a preferred controller node."
-  val AllowPreferredControllerFallbackDoc = "Specifies whether a non-preferred controller node (broker) is allowed to become the controller. " +
+  // Although AllowPreferredControllerFallback is expected to be configured dynamically at per cluster level, providing a static configuration entry
+  // here allows its value to be obtained without holding the dynamic broker configuration lock.
+  val AllowPreferredControllerFallbackDoc = "Specifies whether a non-preferred controller node (broker) is allowed to become the controller." +
+  " This configuration is expected to be configured at cluster level via dynamic broker configuration to provide a consistent configuration among all brokers." +
   " If AllowPreferredControllerFallback is dynamically set to false and there is no preferred controllers, the non-preferred active controller does not resign."
   /************* Authorizer Configuration ***********/
   val AuthorizerClassNameDoc = "The authorizer class that should be used for authorization"

@@ -1382,9 +1382,11 @@ class KafkaController(val config: KafkaConfig,
     * PreferredControllerChange event should be handled by all brokers to perform:
     * 1) update preferred controllers
     * 2) non-preferred active controller resign
-    * 3) elect controller in the absence of preferred controllers. Since ControllerChange event might be fired
-    * before the PreferredControllerChange event, this ensures a non preferred controller node eventually attempts
-    * to elect itself after the last preferred controller goes offline.
+    * 3) elect controller in the absence of preferred controllers. When the last preferred controller goes offline,
+    * ControllerChange event might be fired before the PreferredControllerChange event. When ControllerChange event
+    * is processed, a broker may still see the preferred controller under preferred controller znode and not to elect
+    * itself as controller. Therefore, when PreferredControllerChange event is processed,
+    * a controller election needs to be attempted.
     */
   private def processPreferredControllerChange(): Unit = {
     // refresh the preferred controller list and reset zookeeper watch by reading the list
