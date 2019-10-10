@@ -42,6 +42,7 @@ public class ProducerMetadata extends Metadata {
     private final Time time;
     private final long topicExpiryMs;
 
+    // LI-HOTFIX: this constructor should only be used for unit tests
     public ProducerMetadata(long refreshBackoffMs,
         long metadataExpireMs,
         LogContext logContext,
