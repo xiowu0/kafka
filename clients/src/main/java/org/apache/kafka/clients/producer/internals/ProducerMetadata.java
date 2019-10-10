@@ -43,6 +43,9 @@ public class ProducerMetadata extends Metadata {
     private final long topicExpiryMs;
 
     // LI-HOTFIX: this constructor should only be used for unit tests
+    // after the following hotfix changes:
+    // 1) add metadata.topic.expiry.ms config to KafkaProducer
+    // 2) Make client-side auto.topic.creation configurable and default to be false
     public ProducerMetadata(long refreshBackoffMs,
         long metadataExpireMs,
         LogContext logContext,
