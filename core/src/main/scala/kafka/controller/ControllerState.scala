@@ -102,7 +102,11 @@ object ControllerState {
     def value = 15
   }
 
+  case object PreferredControllerChange extends ControllerState {
+    def value = 16
+  }
+
   val values: Seq[ControllerState] = Seq(Idle, ControllerChange, BrokerChange, TopicChange, TopicDeletion,
     PartitionReassignment, AutoLeaderBalance, ManualLeaderBalance, ControlledShutdown, IsrChange, LeaderAndIsrResponseReceived,
-    LogDirChange, ControllerShutdown, UncleanLeaderElectionEnable, TopicUncleanLeaderElectionEnable, TopicDeletionFlagChange)
+    LogDirChange, ControllerShutdown, UncleanLeaderElectionEnable, TopicUncleanLeaderElectionEnable, TopicDeletionFlagChange, PreferredControllerChange)
 }
