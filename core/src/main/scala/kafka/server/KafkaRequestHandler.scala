@@ -147,7 +147,9 @@ class BrokerTopicMetrics(name: Option[String]) extends KafkaMetricsGroup {
   }
 
   val messagesInRate = newMeter(BrokerTopicStats.MessagesInPerSec, "messages", TimeUnit.SECONDS, tags)
+  val messagesInTotal = newCounter(BrokerTopicStats.MessagesInTotal, tags)
   val bytesInRate = newMeter(BrokerTopicStats.BytesInPerSec, "bytes", TimeUnit.SECONDS, tags)
+  val bytesInTotal = newCounter(BrokerTopicStats.BytesInTotal, tags)
   val bytesOutRate = newMeter(BrokerTopicStats.BytesOutPerSec, "bytes", TimeUnit.SECONDS, tags)
   val bytesRejectedRate = newMeter(BrokerTopicStats.BytesRejectedPerSec, "bytes", TimeUnit.SECONDS, tags)
   private[server] val replicationBytesInRate =
@@ -165,7 +167,9 @@ class BrokerTopicMetrics(name: Option[String]) extends KafkaMetricsGroup {
 
   def close() {
     removeMetric(BrokerTopicStats.MessagesInPerSec, tags)
+    removeMetric(BrokerTopicStats.MessagesInTotal, tags)
     removeMetric(BrokerTopicStats.BytesInPerSec, tags)
+    removeMetric(BrokerTopicStats.BytesInTotal, tags)
     removeMetric(BrokerTopicStats.BytesOutPerSec, tags)
     removeMetric(BrokerTopicStats.BytesRejectedPerSec, tags)
     if (replicationBytesInRate.isDefined)
@@ -183,7 +187,9 @@ class BrokerTopicMetrics(name: Option[String]) extends KafkaMetricsGroup {
 
 object BrokerTopicStats {
   val MessagesInPerSec = "MessagesInPerSec"
+  val MessagesInTotal = "MessagesInTotal"
   val BytesInPerSec = "BytesInPerSec"
+  val BytesInTotal = "BytesInTotal"
   val BytesOutPerSec = "BytesOutPerSec"
   val BytesRejectedPerSec = "BytesRejectedPerSec"
   val ReplicationBytesInPerSec = "ReplicationBytesInPerSec"
