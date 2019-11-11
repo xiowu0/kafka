@@ -49,8 +49,7 @@ public class SslEngineBuilder {
     private static final Logger log = LoggerFactory.getLogger(SslEngineBuilder.class);
 
     private final Map<String, ?> configs;
-    private final String protocol;
-    private final String provider;
+    private SslContextProvider sslContextProvider;
     private final String kmfAlgorithm;
     private final String tmfAlgorithm;
     private final SecurityStore keystore;
@@ -64,8 +63,13 @@ public class SslEngineBuilder {
     @SuppressWarnings("unchecked")
     SslEngineBuilder(Map<String, ?> configs) {
         this.configs = Collections.unmodifiableMap(configs);
-        this.protocol = (String) configs.get(SslConfigs.SSL_PROTOCOL_CONFIG);
-        this.provider = (String) configs.get(SslConfigs.SSL_PROVIDER_CONFIG);
+        try {
+            String sslContextProvider = (String) configs.get(SslConfigs.SSL_CONTEXT_PROVIDER_CLASS_CONFIG);
+            this.sslContextProvider = (SslContextProvider) Class.forName(sslContextProvider).newInstance();
+        } catch (Exception e) {
+            throw new KafkaException(e);
+        }
+        this.sslContextProvider.configure(configs);
 
         List<String> cipherSuitesList = (List<String>) configs.get(SslConfigs.SSL_CIPHER_SUITES_CONFIG);
         if (cipherSuitesList != null && !cipherSuitesList.isEmpty()) {
@@ -127,11 +131,7 @@ public class SslEngineBuilder {
 
     private SSLContext createSSLContext() {
         try {
-            SSLContext sslContext;
-            if (provider != null)
-                sslContext = SSLContext.getInstance(protocol, provider);
-            else
-                sslContext = SSLContext.getInstance(protocol);
+            SSLContext sslContext = sslContextProvider.getSSLContext();
 
             KeyManager[] keyManagers = null;
             if (keystore != null || kmfAlgorithm != null) {
