@@ -866,7 +866,7 @@ public class KafkaProducerTest {
         assertionDoneLatch.await();
     }
 
-    @Test(timeout = 5000)
+    @Test(timeout = 10000)
     public void testCloseIsForcedOnPendingAddOffsetRequest() throws InterruptedException {
         Map<String, Object> configs = new HashMap<>();
         configs.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9000");

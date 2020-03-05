@@ -179,9 +179,18 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
             TOPIC_STATES_V5,
             LIVE_BROKERS_V3);
 
+    // UPDATE_METADATA_REQUEST_V6 replaced the BROKER_EPOCH field in V5 with a MAX_BROKER_EPOCH. The MAX_BROKER_EPOCH
+    // field is intended to make the UpdateMetadataRequest have the same payload for all brokers, and thus be cacheable on the controller.
+    private static final Schema UPDATE_METADATA_REQUEST_V6 = new Schema(
+            CONTROLLER_ID,
+            CONTROLLER_EPOCH,
+            MAX_BROKER_EPOCH,
+            TOPIC_STATES_V5,
+            LIVE_BROKERS_V3);
+
     public static Schema[] schemaVersions() {
         return new Schema[] {UPDATE_METADATA_REQUEST_V0, UPDATE_METADATA_REQUEST_V1, UPDATE_METADATA_REQUEST_V2,
-            UPDATE_METADATA_REQUEST_V3, UPDATE_METADATA_REQUEST_V4, UPDATE_METADATA_REQUEST_V5};
+            UPDATE_METADATA_REQUEST_V3, UPDATE_METADATA_REQUEST_V4, UPDATE_METADATA_REQUEST_V5, UPDATE_METADATA_REQUEST_V6};
     }
 
     public static class Builder extends AbstractControlRequest.Builder<UpdateMetadataRequest> {
@@ -193,9 +202,9 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
         // LIKAFKA-18349 - Cache the UpdateMetadataRequest Objects to reduce memory usage
         private final Map<Short, UpdateMetadataRequest> requestCache = new HashMap<>();
 
-        public Builder(short version, int controllerId, int controllerEpoch, long brokerEpoch,
+        public Builder(short version, int controllerId, int controllerEpoch, long brokerEpoch, long maxBrokerEpoch,
                        Map<TopicPartition, PartitionState> partitionStates, Set<Broker> liveBrokers) {
-            super(ApiKeys.UPDATE_METADATA, version, controllerId, controllerEpoch, brokerEpoch);
+            super(ApiKeys.UPDATE_METADATA, version, controllerId, controllerEpoch, brokerEpoch, maxBrokerEpoch);
             this.partitionStates = partitionStates;
             this.liveBrokers = liveBrokers;
         }
@@ -215,7 +224,7 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
                         }
                     }
                     updateMetadataRequest =
-                        new UpdateMetadataRequest(version, controllerId, controllerEpoch, brokerEpoch, partitionStates,
+                        new UpdateMetadataRequest(version, controllerId, controllerEpoch, brokerEpoch, maxBrokerEpoch, partitionStates,
                             liveBrokers);
                     requestCache.put(version, updateMetadataRequest);
                 }
@@ -235,6 +244,7 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
                 append(", controllerId=").append(controllerId).
                 append(", controllerEpoch=").append(controllerEpoch).
                 append(", brokerEpoch=").append(brokerEpoch).
+                append(", maxBrokerEpoch=").append(maxBrokerEpoch).
                 append(", liveBrokers=").append(Utils.join(liveBrokers, ", ")).
                 append(")");
 
@@ -364,9 +374,9 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
     private Struct struct = null;
     private Lock structLock = new ReentrantLock();
 
-    private UpdateMetadataRequest(short version, int controllerId, int controllerEpoch, long brokerEpoch,
+    private UpdateMetadataRequest(short version, int controllerId, int controllerEpoch, long brokerEpoch, long maxBrokerEpoch,
                                   Map<TopicPartition, PartitionState> partitionStates, Set<Broker> liveBrokers) {
-        super(ApiKeys.UPDATE_METADATA, version, controllerId, controllerEpoch, brokerEpoch);
+        super(ApiKeys.UPDATE_METADATA, version, controllerId, controllerEpoch, brokerEpoch, maxBrokerEpoch);
         this.partitionStates = partitionStates;
         this.liveBrokers = liveBrokers;
     }
@@ -447,6 +457,7 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
                 struct.set(CONTROLLER_ID, controllerId);
                 struct.set(CONTROLLER_EPOCH, controllerEpoch);
                 struct.setIfExists(BROKER_EPOCH, brokerEpoch);
+                struct.setIfExists(MAX_BROKER_EPOCH, maxBrokerEpoch);
 
                 if (struct.hasField(TOPIC_STATES)) {
                     Map<String, Map<Integer, PartitionState>> topicStates = CollectionUtils.groupPartitionDataByTopic(partitionStates);
@@ -518,7 +529,7 @@ public class UpdateMetadataRequest extends AbstractControlRequest {
     @Override
     public AbstractResponse getErrorResponse(int throttleTimeMs, Throwable e) {
         short versionId = version();
-        if (versionId <= 5)
+        if (versionId <= 6)
             return new UpdateMetadataResponse(Errors.forException(e));
         else
             throw new IllegalArgumentException(String.format("Version %d is not valid. Valid versions for %s are 0 to %d",

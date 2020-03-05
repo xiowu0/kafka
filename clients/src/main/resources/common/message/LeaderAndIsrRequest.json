@@ -20,14 +20,17 @@
   // Version 1 adds IsNew.
   //
   // Version 2 adds broker epoch and reorganizes the partitions by topic.
-  "validVersions": "0-2",
+  // Version 3 adds the max broker epoch to make the UpdateMetadataRequest cacheable
+  "validVersions": "0-3",
   "fields": [
     { "name": "ControllerId", "type": "int32", "versions": "0+", "entityType": "brokerId",
       "about": "The current controller ID." },
     { "name": "ControllerEpoch", "type": "int32", "versions": "0+",
       "about": "The current controller epoch." },
-    { "name": "BrokerEpoch", "type": "int64", "versions": "2+", "ignorable": true, "default": "-1",
+    { "name": "BrokerEpoch", "type": "int64", "versions": "2", "ignorable": true, "default": "-1",
       "about": "The current broker epoch." },
+    { "name": "MaxBrokerEpoch", "type": "int64", "versions": "3+", "ignorable": true, "default": "-1",
+      "about": "The max broker epoch." },
     { "name": "TopicStates", "type": "[]LeaderAndIsrRequestTopicState", "versions": "2+",
       "about": "Each topic.", "fields": [
       { "name": "Name", "type": "string", "versions": "2+", "entityType": "topicName",

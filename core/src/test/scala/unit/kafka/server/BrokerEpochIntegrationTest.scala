@@ -140,6 +140,7 @@ class BrokerEpochIntegrationTest extends ZooKeeperTestHarness {
         val requestBuilder = new LeaderAndIsrRequest.Builder(
           ApiKeys.LEADER_AND_ISR.latestVersion, controllerId, controllerEpoch,
           epochInRequest,
+          epochInRequest,
           partitionStates.asJava, nodes.toSet.asJava)
 
         if (isEpochInRequestStale) {
@@ -169,6 +170,7 @@ class BrokerEpochIntegrationTest extends ZooKeeperTestHarness {
         val requestBuilder = new UpdateMetadataRequest.Builder(
           ApiKeys.UPDATE_METADATA.latestVersion, controllerId, controllerEpoch,
           epochInRequest,
+          epochInRequest,
           partitionStates.asJava, liverBrokers.toSet.asJava)
 
         if (isEpochInRequestStale) {
@@ -186,6 +188,7 @@ class BrokerEpochIntegrationTest extends ZooKeeperTestHarness {
       {
         val requestBuilder = new StopReplicaRequest.Builder(
           ApiKeys.STOP_REPLICA.latestVersion, controllerId, controllerEpoch,
+          epochInRequest, // Correct broker epoch
           epochInRequest, // Correct broker epoch
           true, Set(tp).asJava)
 

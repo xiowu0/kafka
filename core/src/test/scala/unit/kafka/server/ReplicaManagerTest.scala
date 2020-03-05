@@ -161,7 +161,7 @@ class ReplicaManagerTest {
       val partition = rm.getOrCreatePartition(new TopicPartition(topic, 0))
       partition.getOrCreateReplica(0)
       // Make this replica the leader.
-      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, false)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
@@ -181,7 +181,7 @@ class ReplicaManagerTest {
       assertFalse(fetchResult.isFired)
 
       // Make this replica the follower
-      val leaderAndIsrRequest2 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest2 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 1, 1, brokerList, 0, brokerList, false)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
@@ -211,7 +211,7 @@ class ReplicaManagerTest {
     try {
       val brokerList = Seq[Integer](0, 1).asJava
       // Make this replica the leader.
-      val leaderAndIsrRequest = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) -> new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, false)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
       rm.becomeLeaderOrFollower(0, leaderAndIsrRequest, (_, _) => ())
@@ -223,12 +223,12 @@ class ReplicaManagerTest {
       }
 
       // Send StopReplicaRequest(delete = false) to move replica to OfflineReplica state.
-      val stopReplicaRequest1 =  new StopReplicaRequest.Builder(ApiKeys.STOP_REPLICA.latestVersion(), 0, 0, brokerEpoch, false,
+      val stopReplicaRequest1 =  new StopReplicaRequest.Builder(ApiKeys.STOP_REPLICA.latestVersion(), 0, 0, brokerEpoch, brokerEpoch, false,
         Set(new TopicPartition(topic, 0)).asJava).build()
       rm.stopReplicas(stopReplicaRequest1)
 
       // Send StopReplicaRequest(delete = true) to move replica to NonExistentReplica state.
-      val stopReplicaRequest2 =  new StopReplicaRequest.Builder(ApiKeys.STOP_REPLICA.latestVersion(), 0, 0, brokerEpoch, true,
+      val stopReplicaRequest2 =  new StopReplicaRequest.Builder(ApiKeys.STOP_REPLICA.latestVersion(), 0, 0, brokerEpoch, brokerEpoch, true,
         Set(new TopicPartition(topic, 0)).asJava).build()
       rm.stopReplicas(stopReplicaRequest2)
 
@@ -250,7 +250,7 @@ class ReplicaManagerTest {
       partition.getOrCreateReplica(0)
 
       // Make this replica the leader.
-      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, true)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
@@ -301,7 +301,7 @@ class ReplicaManagerTest {
       partition.getOrCreateReplica(0)
 
       // Make this replica the leader.
-      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, true)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
@@ -397,7 +397,7 @@ class ReplicaManagerTest {
       partition.getOrCreateReplica(0)
 
       // Make this replica the leader.
-      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, true)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1)).asJava).build()
@@ -463,7 +463,7 @@ class ReplicaManagerTest {
       partition.getOrCreateReplica(0)
 
       // Make this replica the leader.
-      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest1 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(new TopicPartition(topic, 0) ->
           new LeaderAndIsrRequest.PartitionState(0, 0, 0, brokerList, 0, brokerList, false)).asJava,
         Set(new Node(0, "host1", 0), new Node(1, "host2", 1), new Node(2, "host2", 2)).asJava).build()
@@ -513,7 +513,7 @@ class ReplicaManagerTest {
       replicaManager.getOrCreatePartition(tp1).getOrCreateReplica(0)
       val partition0Replicas = Seq[Integer](0, 1).asJava
       val partition1Replicas = Seq[Integer](0, 2).asJava
-      val leaderAndIsrRequest = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch,
+      val leaderAndIsrRequest = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion, 0, 0, brokerEpoch, brokerEpoch,
         collection.immutable.Map(
           tp0 -> new LeaderAndIsrRequest.PartitionState(0, 0, 0, partition0Replicas, 0, partition0Replicas, true),
           tp1 -> new LeaderAndIsrRequest.PartitionState(0, 0, 0, partition1Replicas, 0, partition1Replicas, true)
@@ -610,7 +610,7 @@ class ReplicaManagerTest {
     // trigger even though leader does not change
     leaderEpoch += leaderEpochIncrement
     val leaderAndIsrRequest0 = new LeaderAndIsrRequest.Builder(ApiKeys.LEADER_AND_ISR.latestVersion,
-      controllerId, controllerEpoch, brokerEpoch,
+      controllerId, controllerEpoch, brokerEpoch, brokerEpoch,
       collection.immutable.Map(new TopicPartition(topic, topicPartition) ->
         leaderAndIsrPartitionState(leaderEpoch, leaderBrokerId, aliveBrokerIds)).asJava,
       Set(new Node(followerBrokerId, "host1", 0),

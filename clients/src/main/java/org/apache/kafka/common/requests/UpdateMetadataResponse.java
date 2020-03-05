@@ -33,12 +33,13 @@ public class UpdateMetadataResponse extends AbstractResponse {
     private static final Schema UPDATE_METADATA_RESPONSE_V3 = UPDATE_METADATA_RESPONSE_V2;
     private static final Schema UPDATE_METADATA_RESPONSE_V4 = UPDATE_METADATA_RESPONSE_V3;
     private static final Schema UPDATE_METADATA_RESPONSE_V5 = UPDATE_METADATA_RESPONSE_V4;
+    private static final Schema UPDATE_METADATA_RESPONSE_V6 = UPDATE_METADATA_RESPONSE_V5;
 
     public static Schema[] schemaVersions() {
         return new Schema[]{UPDATE_METADATA_RESPONSE_V0, UPDATE_METADATA_RESPONSE_V1, UPDATE_METADATA_RESPONSE_V2,
-            UPDATE_METADATA_RESPONSE_V3, UPDATE_METADATA_RESPONSE_V4, UPDATE_METADATA_RESPONSE_V5};
+            UPDATE_METADATA_RESPONSE_V3, UPDATE_METADATA_RESPONSE_V4, UPDATE_METADATA_RESPONSE_V5, UPDATE_METADATA_RESPONSE_V6};
     }
-
+    
     /**
      * Possible error code:
      *

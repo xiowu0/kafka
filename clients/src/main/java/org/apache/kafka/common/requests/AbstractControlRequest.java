@@ -27,21 +27,25 @@ public abstract class AbstractControlRequest extends AbstractRequest {
     protected static final Field.Int32 CONTROLLER_ID = new Field.Int32("controller_id", "The controller id");
     protected static final Field.Int32 CONTROLLER_EPOCH = new Field.Int32("controller_epoch", "The controller epoch");
     protected static final Field.Int64 BROKER_EPOCH = new Field.Int64("broker_epoch", "The broker epoch");
+    protected static final Field.Int64 MAX_BROKER_EPOCH = new Field.Int64("max_broker_epoch", "The max value of all broker epochs");
 
     protected final int controllerId;
     protected final int controllerEpoch;
     protected final long brokerEpoch;
+    protected final long maxBrokerEpoch;
 
     public static abstract class Builder<T extends AbstractRequest> extends AbstractRequest.Builder<T> {
         protected final int controllerId;
         protected final int controllerEpoch;
         protected final long brokerEpoch;
+        protected final long maxBrokerEpoch;
 
-        protected Builder(ApiKeys api, short version, int controllerId, int controllerEpoch, long brokerEpoch) {
+        protected Builder(ApiKeys api, short version, int controllerId, int controllerEpoch, long brokerEpoch, long maxBrokerEpoch) {
             super(api, version);
             this.controllerId = controllerId;
             this.controllerEpoch = controllerEpoch;
             this.brokerEpoch = brokerEpoch;
+            this.maxBrokerEpoch = maxBrokerEpoch;
         }
 
     }
@@ -58,11 +62,16 @@ public abstract class AbstractControlRequest extends AbstractRequest {
         return brokerEpoch;
     }
 
-    protected AbstractControlRequest(ApiKeys api, short version, int controllerId, int controllerEpoch, long brokerEpoch) {
+    public long maxBrokerEpoch() {
+        return maxBrokerEpoch;
+    }
+
+    protected AbstractControlRequest(ApiKeys api, short version, int controllerId, int controllerEpoch, long brokerEpoch, long maxBrokerEpoch) {
         super(api, version);
         this.controllerId = controllerId;
         this.controllerEpoch = controllerEpoch;
         this.brokerEpoch = brokerEpoch;
+        this.maxBrokerEpoch = maxBrokerEpoch;
     }
 
     protected AbstractControlRequest(ApiKeys api, Struct struct, short version) {
@@ -70,6 +79,7 @@ public abstract class AbstractControlRequest extends AbstractRequest {
         this.controllerId = struct.get(CONTROLLER_ID);
         this.controllerEpoch = struct.get(CONTROLLER_EPOCH);
         this.brokerEpoch = struct.getOrElse(BROKER_EPOCH, UNKNOWN_BROKER_EPOCH);
+        this.maxBrokerEpoch = struct.getOrElse(MAX_BROKER_EPOCH, UNKNOWN_BROKER_EPOCH);
     }
 
     // Used for test

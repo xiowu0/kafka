@@ -37,7 +37,7 @@ public class ControlRequestTest {
             partitionStates.put(tp, new LeaderAndIsrRequest.PartitionState(0, 0, 0,
                     Collections.emptyList(), 0, Collections.emptyList(), false));
         }
-        LeaderAndIsrRequest.Builder builder = new LeaderAndIsrRequest.Builder((short) 2, 0, 0, 0,
+        LeaderAndIsrRequest.Builder builder = new LeaderAndIsrRequest.Builder((short) 2, 0, 0, 0, 0,
                 partitionStates, Collections.emptySet());
 
         Assert.assertTrue(builder.build((short) 2).size() <  builder.build((short) 1).size());
@@ -51,7 +51,7 @@ public class ControlRequestTest {
             partitionStates.put(tp, new UpdateMetadataRequest.PartitionState(0, 0, 0,
                     Collections.emptyList(), 0, Collections.emptyList(), Collections.emptyList()));
         }
-        UpdateMetadataRequest.Builder builder = new UpdateMetadataRequest.Builder((short) 5, 0, 0, 0,
+        UpdateMetadataRequest.Builder builder = new UpdateMetadataRequest.Builder((short) 5, 0, 0, 0, 0,
                 partitionStates, Collections.emptySet());
 
         Assert.assertTrue(builder.build((short) 5).size() <  builder.build((short) 4).size());
@@ -65,7 +65,7 @@ public class ControlRequestTest {
             partitionStates.put(tp, new UpdateMetadataRequest.PartitionState(0, 0, 0,
                     Collections.emptyList(), 0, Collections.emptyList(), Collections.emptyList()));
         }
-        StopReplicaRequest.Builder builder = new StopReplicaRequest.Builder((short) 5, 0, 0, 0, false, tps);
+        StopReplicaRequest.Builder builder = new StopReplicaRequest.Builder((short) 5, 0, 0, 0, 0, false, tps);
 
         Assert.assertTrue(builder.build((short) 1).size() <  builder.build((short) 0).size());
     }

@@ -153,7 +153,8 @@ class LeaderElectionTest extends ZooKeeperTestHarness {
           Seq(0, 1).map(Integer.valueOf).asJava, false)
       )
       val requestBuilder = new LeaderAndIsrRequest.Builder(
-        ApiKeys.LEADER_AND_ISR.latestVersion, controllerId, staleControllerEpoch, servers(brokerId2).kafkaController.brokerEpoch ,partitionStates.asJava, nodes.toSet.asJava)
+        ApiKeys.LEADER_AND_ISR.latestVersion, controllerId, staleControllerEpoch, servers(brokerId2).kafkaController.brokerEpoch, 
+        servers(brokerId2).kafkaController.brokerEpoch,partitionStates.asJava, nodes.toSet.asJava)
 
       controllerChannelManager.sendRequest(brokerId2, requestBuilder, staleControllerEpochCallback)
       TestUtils.waitUntilTrue(() => staleControllerEpochDetected, "Controller epoch should be stale")
@@ -206,11 +207,15 @@ class LeaderElectionTest extends ZooKeeperTestHarness {
       )
       val leaderAndIsrRequestBuilder = new LeaderAndIsrRequest.Builder(
         ApiKeys.LEADER_AND_ISR.latestVersion, controllerId, newerControllerEpoch,
-        brokerAndEpochs.find(e => e._1.id == brokerId2).get._2, partitionStates.asJava, nodes.toSet.asJava)
+        brokerAndEpochs.find(e => e._1.id == brokerId2).get._2, 
+        brokerAndEpochs.find(e => e._1.id == brokerId2).get._2,
+        partitionStates.asJava, nodes.toSet.asJava)
 
       val stopReplicaRequestBuilder = new StopReplicaRequest.Builder(
         ApiKeys.STOP_REPLICA.latestVersion, brokerId2,
-        newerControllerEpoch, brokerAndEpochs.find(e => e._1.id == brokerId2).get._2, false, Set(tp).asJava)
+        newerControllerEpoch, brokerAndEpochs.find(e => e._1.id == brokerId2).get._2,
+        brokerAndEpochs.find(e => e._1.id == brokerId2).get._2,
+        false, Set(tp).asJava)
 
       // Send LeaderAndIsrRequest to make brokerId2 the follower
       val firstLeaderAndIsrResponseReceived = new CountDownLatch(1)
